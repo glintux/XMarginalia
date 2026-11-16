@@ -66,7 +66,7 @@ typedef struct {
 } Score;
 
 // -------------------------------- Global Data -------------------------------
-extern Byte         pat3set[8192];
+extern Byte*        pat3set;
 extern int          npat3;
 extern Byte*        pat3set_p[15];
 extern Mark*        already_suggested;
@@ -81,7 +81,8 @@ extern float        start_playouts_sec, stop_playouts_sec;
 extern int          nplayouts_real;
 extern float        saved_time_left;
 extern float        best2, bestr, bestwr;
-extern ZobristHash  zobrist_hashdata[ZOBRIST_HASH_SIZE][4];
+extern ZobristHash  (*zobrist_hashdata)[4];
+void   michi_tables_alloc(void);
 //================================== Code =====================================
 //------------------------- Functions in control.c ----------------------------
 void   compute_all_status(Position *pos, int owner_map[BOARDSIZE],

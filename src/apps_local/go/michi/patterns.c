@@ -4,6 +4,9 @@
 // MIT licence (i.e. almost public domain)
 #include "michi.h"
 
+#include <esp_heap_caps.h>
+#include <stdlib.h>
+
 // There are two types of patterns used in michi :
 //
 // - 3x3 patterns : given the color of the 8 neighbors of the central point 
@@ -44,7 +47,23 @@
 // the routines that modify the board put_stone() and remove_stone()
 //
 Byte bit[8]={1,2,4,8,16,32,64,128};
-Byte pat3set[8192];     // Set of the pat3 patterns (defined in pat3src below)
+Byte* pat3set;          // Set of the pat3 patterns (defined in pat3src below)
+
+// The generated tables live in PSRAM, allocated on first use: as static
+// arrays they held about 22KB of internal RAM whether or not Go was played.
+static void* michi_table_alloc(size_t bytes)
+{
+    void* p = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);
+    if (!p) p = malloc(bytes);
+    return p;
+}
+
+void michi_tables_alloc(void)
+{
+    if (!pat3set) pat3set = michi_table_alloc(8192);
+    if (!zobrist_hashdata)
+        zobrist_hashdata = michi_table_alloc(sizeof(ZobristHash) * ZOBRIST_HASH_SIZE * 4);
+}
 int  npat3;             // Number of patterns in pat3src
 
 // A set of 3x3 patterns is defined by an array of ASCII strings (of length 10) 
@@ -259,6 +278,7 @@ void make_pat3set(void)
 // Build the pat3set set (bitfield of 65536 bits). 
 // See explanations at top of the file
 {
+    michi_tables_alloc();
     npat3 = sizeof(pat3src) / 10 - 1;
     if (npat3 > 13) {
         fprintf(stderr,"Error npat3 too big (%d)\n", npat3);
@@ -346,7 +366,7 @@ int primes[32]={5,      11,    37,   103,   293,   991, 2903,  9931,
 
 static char buf[512];
 int         color[256];
-ZobristHash zobrist_hashdata[ZOBRIST_HASH_SIZE][4];
+ZobristHash (*zobrist_hashdata)[4];
 LargePat*   patterns;
 float*      probs;
 long long   nsearchs=0;
@@ -419,6 +439,7 @@ void init_stone_color(void)
 
 void init_zobrist_hashdata(void)
 {
+    michi_tables_alloc();
     int idum_save = idum;
     idum = 55555; // make sure zobrist_hashdata does not depend on user input
                   // 55555 seems to work reasonably well

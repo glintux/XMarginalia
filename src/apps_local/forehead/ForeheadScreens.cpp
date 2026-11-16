@@ -500,8 +500,11 @@ void buildReady(toybox::Screen& screen, const ReadyModel& model) {
   // type with a hole under it.
   drawText(screen, fui::makeRect(0, static_cast<int16_t>(bottom - 108), w, 44), "HOLD IT ON YOUR FOREHEAD",
            toybox::kBodyFont, fui::TextAlign::Center, toybox::kDisplayCut);
-  drawText(screen, fui::makeRect(0, static_cast<int16_t>(bottom - 58), w, 44), "PRESS EITHER KEY TO START",
-           toybox::kBodyFont, fui::TextAlign::Center, toybox::kDisplayCut);
+  // With an IMU the card teaches the tilt, because that is how the round
+  // will actually be played; the keys still start it too, silently.
+  drawText(screen, fui::makeRect(0, static_cast<int16_t>(bottom - 58), w, 44),
+           model.tilt ? "TILT TO START" : "PRESS EITHER KEY TO START", toybox::kBodyFont, fui::TextAlign::Center,
+           toybox::kDisplayCut);
 
   // Tapping the middle also starts it, for the same reason the round accepts
   // touch: never only a button.
@@ -843,6 +846,17 @@ constexpr Page kPages[] = {
      Figure::Marks},
 };
 
+// The controls page on a board with an IMU (the Picco). Same slot in the
+// book, same figure: the mini device's labelled edges are still where PASS
+// and GOT IT live on screen. What changes is the verb -- tilt is the input
+// the player will actually use, so it gets the page, and the keys are
+// demoted to the last line, where a backup belongs.
+constexpr Page kTiltControlsPage = {"TILT TO ANSWER",
+                                    {"HOLD IT ON YOUR FOREHEAD AND", "TILT THE DEVICE TO ANSWER.", "",
+                                     "TILT DOWN WHEN YOU GET IT.", "TILT UP TO PASS.", "",
+                                     "THE KEYS AND TOUCH STILL WORK."},
+                                    Figure::Keys};
+
 constexpr int kPageCount = static_cast<int>(sizeof(kPages) / sizeof(kPages[0]));
 
 // A little device, drawn portrait-shaped so it reads as the thing in your hand
@@ -901,6 +915,7 @@ int howToPages() { return kPageCount; }
 
 void buildHowTo(toybox::Screen& screen, const HowToModel& model) {
   const int page = model.page < 0 ? 0 : (model.page >= kPageCount ? kPageCount - 1 : model.page);
+  const Page& current = (model.tilt && page == 1) ? kTiltControlsPage : kPages[page];
   char right[toybox::kSlashCounterChars];
   std::snprintf(right, sizeof(right), "%d/%d", page + 1, kPageCount);
   toyboxChrome(screen, "HOW TO PLAY", right);
@@ -908,11 +923,11 @@ void buildHowTo(toybox::Screen& screen, const HowToModel& model) {
   const fui::Rect pips = screen.takeBottom(kPipBand);
   drawPips(screen, pips, kPageCount, page, ActionPage);
 
-  drawText(screen, screen.takeTop(56), kPages[page].title, toybox::kDisplayFont, fui::TextAlign::Left,
+  drawText(screen, screen.takeTop(56), current.title, toybox::kDisplayFont, fui::TextAlign::Left,
            toybox::kDisplayCut);
   screen.takeTop(toybox::kGutter);
 
-  for (const char* line : kPages[page].body) {
+  for (const char* line : current.body) {
     const fui::Rect row = screen.takeTop(38);
     if (line != nullptr && *line != '\0') {
       drawText(screen, row, line, toybox::kSmallFont, fui::TextAlign::Left, toybox::kButtonCut);
@@ -921,7 +936,7 @@ void buildHowTo(toybox::Screen& screen, const HowToModel& model) {
 
   screen.takeTop(toybox::kGutter);
   const fui::Rect figure = screen.body();
-  switch (kPages[page].figure) {
+  switch (current.figure) {
     case Figure::Marks:
       drawMarkLegend(screen, figure);
       break;
@@ -940,7 +955,7 @@ void buildHowTo(toybox::Screen& screen, const HowToModel& model) {
       drawMiniDevice(
           screen,
           fui::makeRect(static_cast<int16_t>(figure.x + (figure.width - deviceW) / 2), figure.y, deviceW, deviceH),
-          "PENGUIN", kPages[page].figure == Figure::Keys);
+          "PENGUIN", current.figure == Figure::Keys);
       break;
     }
   }

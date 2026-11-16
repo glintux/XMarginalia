@@ -68,6 +68,10 @@ struct PickerModel {
 struct ReadyModel {
   int category = 0;
   int roundSeconds = forehead::kDefaultRoundSeconds;
+  // True when the board has an IMU and tilt input is live: the card then
+  // teaches tilt, which is the input the player will actually use. The
+  // keys keep working either way; they are just not the headline.
+  bool tilt = false;
 };
 
 // The round. Nothing here is a pointer into the Round object: the activity
@@ -93,6 +97,8 @@ struct ResultModel {
 
 struct HowToModel {
   int page = 0;
+  // Same split as ReadyModel: with an IMU the controls page teaches tilt.
+  bool tilt = false;
 };
 
 struct SettingsModel {

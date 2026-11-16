@@ -190,7 +190,7 @@ void CrossPointWebServer::begin() {
   // Store AP mode flag for later use (e.g., in handleStatus)
   apMode = isInApMode;
 
-  LOG_DBG("WEB", "[MEM] Free heap before begin: %d bytes", ESP.getFreeHeap());
+  LOG_INF("WEB", "[MEM] Free heap before begin: %d bytes", ESP.getFreeHeap());
   LOG_DBG("WEB", "Network mode: %s", apMode ? "AP" : "STA");
 
   LOG_DBG("WEB", "Creating web server on port %d...", port);
@@ -206,7 +206,7 @@ void CrossPointWebServer::begin() {
   // Note: WebServer class doesn't have setNoDelay() in the standard ESP32 library.
   // We rely on disabling WiFi sleep for responsiveness.
 
-  LOG_DBG("WEB", "[MEM] Free heap after WebServer allocation: %d bytes", ESP.getFreeHeap());
+  LOG_INF("WEB", "[MEM] Free heap after WebServer allocation: %d bytes", ESP.getFreeHeap());
 
   if (!server) {
     LOG_ERR("WEB", "Failed to create WebServer!");
@@ -379,7 +379,7 @@ void CrossPointWebServer::begin() {
   }  // isFull() || isDev()
 
   server->onNotFound([this] { handleNotFound(); });
-  LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
+  LOG_INF("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
   // X-Dev-Token rides along here: Arduino's WebServer only retains headers it
@@ -397,10 +397,11 @@ void CrossPointWebServer::begin() {
 
   server->begin();
 
-  if (isFull()) {
+  if (isFull() && !BoardConfig::isPicco()) {
     // Fast binary uploads for the file manager. Dev mode uploads over plain
     // HTTP instead, which is one fewer listening port for the surface that
-    // stays up the longest.
+    // stays up the longest. Picco takes the plain HTTP path too: its internal
+    // RAM is too tight for a second listener next to the WiFi stack.
     LOG_DBG("WEB", "Starting WebSocket server on port %d...", wsPort);
     wsServer.reset(new WebSocketsServer(wsPort));
     wsInstance = const_cast<CrossPointWebServer*>(this);
@@ -409,7 +410,7 @@ void CrossPointWebServer::begin() {
     LOG_DBG("WEB", "WebSocket server started");
   }
 
-  udpActive = udp.begin(LOCAL_UDP_PORT);
+  udpActive = !BoardConfig::isPicco() && udp.begin(LOCAL_UDP_PORT);
   LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
 
   // Do not subscribe the serving task to the task watchdog. Arduino WebServer
@@ -419,12 +420,14 @@ void CrossPointWebServer::begin() {
 
   running = true;
 
-  LOG_DBG("WEB", "Web server started on port %d", port);
+  // LOG_INF, not DBG: release builds (LOG_LEVEL=1) must be able to prove from
+  // a serial capture that the server came up, and on which address.
+  LOG_INF("WEB", "Web server started on port %d", port);
   // Show the correct IP based on network mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
-  LOG_DBG("WEB", "Access at http://%s/", ipAddr.c_str());
+  LOG_INF("WEB", "Access at http://%s/", ipAddr.c_str());
   LOG_DBG("WEB", "WebSocket at ws://%s:%d/", ipAddr.c_str(), wsPort);
-  LOG_DBG("WEB", "[MEM] Free heap after server.begin(): %d bytes", ESP.getFreeHeap());
+  LOG_INF("WEB", "[MEM] Free heap after server.begin(): %d bytes", ESP.getFreeHeap());
 }
 
 void CrossPointWebServer::suspendTransferServices() {
@@ -441,7 +444,7 @@ void CrossPointWebServer::suspendTransferServices() {
 
 void CrossPointWebServer::resumeTransferServices() {
   if (!running) return;
-  if (!wsServer) {
+  if (!wsServer && !BoardConfig::isPicco()) {
     auto* ws = new (std::nothrow) WebSocketsServer(wsPort);
     if (ws) {
       wsServer.reset(ws);

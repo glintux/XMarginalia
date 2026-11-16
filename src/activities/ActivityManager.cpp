@@ -401,6 +401,11 @@ void ActivityManager::goToJoinNetwork() {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, /*startInJoinNetwork=*/true));
 }
 
+void ActivityManager::goToHotspot() {
+  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, /*startInJoinNetwork=*/false,
+                                                                 /*startInHotspot=*/true));
+}
+
 void ActivityManager::goToUsbDrive() {
 #if FREEINK_CAP_USB_MSC
   auto activity = makeUniqueNoThrow<UsbDriveActivity>(renderer, mappedInput);

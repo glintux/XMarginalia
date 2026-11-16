@@ -7,6 +7,7 @@
 #include <HalGPIO.h>
 #include <I18n.h>
 #include <WiFi.h>
+#include <esp_netif.h>
 
 #include <cstddef>
 
@@ -49,6 +50,40 @@ void stopDnsServer() {
   dnsServer = nullptr;
 }
 
+// WiFi event witness, registered once per boot. Release builds log at
+// LOG_LEVEL=1, which swallows every driver-level WiFi event -- so when a
+// phone or PC fails to join the AP or reach the server, the serial log
+// shows the server "running" and then nothing, and there is no way to tell
+// an association that never happened from one that completed and died at
+// DHCP. These lines are that distinction. INF on purpose.
+bool wifiEventsRegistered = false;
+void registerWifiEventLogging() {
+  if (wifiEventsRegistered) return;
+  wifiEventsRegistered = true;
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    switch (event) {
+      case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+        LOG_INF("WIFIEVT", "AP station joined, aid=%d", info.wifi_ap_staconnected.aid);
+        break;
+      case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+        LOG_INF("WIFIEVT", "AP station left, aid=%d reason=%d", info.wifi_ap_stadisconnected.aid,
+                info.wifi_ap_stadisconnected.reason);
+        break;
+      case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:
+        LOG_INF("WIFIEVT", "AP station assigned IP %s", IPAddress(info.wifi_ap_staipassigned.ip.addr).toString().c_str());
+        break;
+      case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+        LOG_INF("WIFIEVT", "STA got IP %s", WiFi.localIP().toString().c_str());
+        break;
+      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+        LOG_INF("WIFIEVT", "STA disconnected, reason=%d", info.wifi_sta_disconnected.reason);
+        break;
+      default:
+        break;
+    }
+  });
+}
+
 void restartMdns(const char* hostname, const char* tag) {
   MDNS.end();
   if (MDNS.begin(hostname)) {
@@ -76,7 +111,8 @@ void CrossPointWebServerActivity::onEnter() {
   // screen is broken", so dev mode yields for as long as the screen is up.
   devmode::pause();
 
-  LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
+  LOG_INF("WEBACT", "Free heap at onEnter: %u bytes, max block %u, psram free %u", ESP.getFreeHeap(),
+          ESP.getMaxAllocHeap(), ESP.getFreePsram());
 
   // Heap-critical transition: WiFi (~45KB) plus the web server have to fit in
   // what's left of the ~380KB parts. SD-font caches retained for the CJK UI
@@ -85,7 +121,7 @@ void CrossPointWebServerActivity::onEnter() {
   // when the heap comes up short (observed on X3 with a Korean SD font).
   if (auto* fcm = renderer.getFontCacheManager()) {
     fcm->releaseSdFontCaches();
-    LOG_DBG("WEBACT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
+    LOG_INF("WEBACT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
 
   // Reset state
@@ -102,6 +138,12 @@ void CrossPointWebServerActivity::onEnter() {
     // picker and go straight into Join Network (onNetworkModeSelected won't
     // reboot again while this flag is set).
     onNetworkModeSelected(NetworkMode::JOIN_NETWORK);
+    return;
+  }
+
+  if (startInHotspot) {
+    // Same return path for Create Hotspot.
+    onNetworkModeSelected(NetworkMode::CREATE_HOTSPOT);
     return;
   }
 
@@ -171,7 +213,10 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   // into a pristine heap and land straight back here; the flag prevents a second
   // reboot on that return. No-op on touch boards, which fall through.
   if (mode == NetworkMode::JOIN_NETWORK && !startInJoinNetwork) {
-    silentRestartToJoinNetwork();  // does not return on non-touch boards
+    silentRestartToJoinNetwork();  // does not return on non-touch boards, or on Picco
+  }
+  if (mode == NetworkMode::CREATE_HOTSPOT && !startInHotspot) {
+    silentRestartToHotspot();  // same fresh-heap reboot for the AP flow
   }
 
   const char* modeName = "Join Network";
@@ -244,6 +289,11 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     // Get connection info before exiting subactivity
     isApMode = false;
 
+    // Same TX experiment as AP mode: page responses are the big downlink
+    // frames, and they are what never arrives.
+    WiFi.setTxPower(WIFI_POWER_15dBm);
+    LOG_INF("WEBACT", "STA TX power set to %d (enum)", static_cast<int>(WiFi.getTxPower()));
+
     // Start mDNS for hostname resolution
     restartMdns(devicehost::mdnsName(), "WEBACT");
 
@@ -272,6 +322,18 @@ void CrossPointWebServerActivity::startAccessPoint() {
   WiFi.mode(WIFI_AP);
   delay(100);
 
+  // Pin the AP netif config explicitly. softAP() normally applies these
+  // defaults itself, but if anything configured the netif earlier the DHCP
+  // pool can silently disagree with the address the QR advertises.
+  WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
+  // Full TX power on this board's front end coincides with clients
+  // expiring mid-auth (station joined, dropped ~1s later, reason 2, no
+  // lease ever issued). Run the radio softer; range is a non-issue at
+  // file-transfer distance.
+  WiFi.setTxPower(WIFI_POWER_15dBm);
+  LOG_INF("WEBACT", "AP TX power set to %d (enum), softAPIP will be %s", static_cast<int>(WiFi.getTxPower()),
+          WiFi.softAPIP().toString().c_str());
+
   // Start soft AP
   bool apStarted;
   if (AP_PASSWORD && strlen(AP_PASSWORD) >= 8) {
@@ -286,8 +348,25 @@ void CrossPointWebServerActivity::startAccessPoint() {
     onGoHome();
     return;
   }
+  registerWifiEventLogging();
+  LOG_INF("WEBACT", "Free heap after softAP: %d bytes, max block %u", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   delay(100);  // Wait for AP to fully initialize
+
+  // A client that associates but never gets a DHCP lease reports exactly
+  // the same "can't connect" as one that never associated. softAP() is
+  // supposed to leave the AP netif's DHCP server running; verify it, and
+  // start it if a previous session's teardown stopped it.
+  if (esp_netif_t* apNetif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF")) {
+    esp_netif_dhcp_status_t dhcpStatus = ESP_NETIF_DHCP_INIT;
+    if (esp_netif_dhcps_get_status(apNetif, &dhcpStatus) == ESP_OK) {
+      LOG_INF("WEBACT", "AP DHCP server status: %d (1=started)", static_cast<int>(dhcpStatus));
+      if (dhcpStatus != ESP_NETIF_DHCP_STARTED) {
+        const esp_err_t started = esp_netif_dhcps_start(apNetif);
+        LOG_INF("WEBACT", "AP DHCP server start requested: %s", esp_err_to_name(started));
+      }
+    }
+  }
 
   // Get AP IP address
   const IPAddress apIP = WiFi.softAPIP();
@@ -319,13 +398,14 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
 void CrossPointWebServerActivity::startWebServer() {
   LOG_DBG("WEBACT", "Starting web server...");
+  registerWifiEventLogging();
 
   // Repeat the release right before the allocation: the WiFi selection screen
   // rendered since onEnter(), and a CJK SSID repopulates the SD-font caches.
   if (auto* fcm = renderer.getFontCacheManager()) {
-    LOG_DBG("WEBACT", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
+    LOG_INF("WEBACT", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
     fcm->releaseSdFontCaches();
-    LOG_DBG("WEBACT", "Free heap before server alloc: %d bytes", ESP.getFreeHeap());
+    LOG_INF("WEBACT", "Free heap before server alloc: %d bytes", ESP.getFreeHeap());
   }
 
   // Create the web server instance
@@ -346,7 +426,11 @@ void CrossPointWebServerActivity::startWebServer() {
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
-    LOG_DBG("WEBACT", "Web server started successfully");
+    // LOG_INF, not DBG: release builds (LOG_LEVEL=1) must be able to prove
+    // from a serial capture that the server came up, and on which address.
+    LOG_INF("WEBACT", "Web server running at http://%s/ (%s), free heap %u, max block %u", connectedIP.c_str(),
+            isApMode ? "AP" : "STA", static_cast<unsigned>(ESP.getFreeHeap()),
+            static_cast<unsigned>(ESP.getMaxAllocHeap()));
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
 
     // The device is online: deliver queued plugin events through their
@@ -373,6 +457,22 @@ void CrossPointWebServerActivity::loop() {
     // Handle DNS requests for captive portal (AP mode only)
     if (isApMode && dnsServer) {
       dnsServer->processNextRequest();
+    }
+
+    // AP mode: witness the station count. A join that never reaches the
+    // driver shows up here as a count that never leaves zero, which reads
+    // very differently in a log from a join the event callback reported.
+    if (isApMode) {
+      static unsigned long lastStationCheck = 0;
+      static int lastStationCount = -1;
+      if (millis() - lastStationCheck > 2000) {
+        lastStationCheck = millis();
+        const int stations = WiFi.softAPgetStationNum();
+        if (stations != lastStationCount) {
+          lastStationCount = stations;
+          LOG_INF("WEBACT", "AP stations connected: %d", stations);
+        }
+      }
     }
 
     // STA mode: Monitor WiFi connection health
@@ -532,18 +632,26 @@ void CrossPointWebServerActivity::renderServerRunning() const {
                       EpdFontFamily::BOLD);
     startY += height10 + metrics.verticalSpacing * 2;
 
-    std::string hostnameUrl = std::string("http://") + devicehost::mdnsName() + ".local/";
-    std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
+    // The QR code carries the numeric AP address, always (the fork's rule, see
+    // WallpapersActivity/NotesActivity: "THE CODE CARRIES THE ADDRESS,
+    // ALWAYS"). The .local name depends on the mDNS responder AND on the
+    // phone resolving .local over a foreign AP, which Android frequently
+    // cannot do -- encoding the name put an unresolvable address into the one
+    // element the user cannot read, and the page simply never loaded. The
+    // name is still printed as text for bookmarking on networks where it
+    // resolves.
+    std::string ipUrl = "http://" + std::string(WiFi.softAPIP().toString().c_str()) + "/";
+    std::string hostnameAlt = std::string(tr(STR_OR_HTTP_PREFIX)) + devicehost::mdnsName() + ".local/";
 
     // Show QR code for URL
     const Rect qrBoundsUrl(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
-    QrUtils::drawQrCode(renderer, qrBoundsUrl, hostnameUrl);
+    QrUtils::drawQrCode(renderer, qrBoundsUrl, ipUrl);
 
-    // Show IP address as fallback
+    // Show the IP address the code carries, and the hostname as the fallback
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
-                      hostnameUrl.c_str());
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 100,
                       ipUrl.c_str());
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 100,
+                      hostnameAlt.c_str());
   } else {
     startY += metrics.verticalSpacing * 2;
 
@@ -554,8 +662,10 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_SCAN_QR_HINT), true, EpdFontFamily::BOLD);
     startY += height10 + metrics.verticalSpacing * 2;
 
-    // Show QR code for URL
-    std::string webInfo = "http://" + connectedIP + "/";
+    // Show QR code for URL. Read the address live rather than using the IP
+    // captured when the WiFi selection completed: a DHCP renewal between
+    // joining and scanning would leave the code pointing at a stale address.
+    std::string webInfo = "http://" + std::string(WiFi.localIP().toString().c_str()) + "/";
     const Rect qrBounds((pageWidth - QR_CODE_WIDTH) / 2, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
     QrUtils::drawQrCode(renderer, qrBounds, webInfo);
     startY += QR_CODE_HEIGHT + metrics.verticalSpacing * 2;

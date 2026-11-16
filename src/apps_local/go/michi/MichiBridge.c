@@ -47,6 +47,7 @@ void michi_bridge_init(void)
     // rather than leaving a null global looking like an oversight.
     flog = NULL;
 
+    michi_tables_alloc();
     make_pat3set();
     // The ladder reader's Position stack, one slot per level the depth cap
     // allows and one spare. See the note in michi.c: upstream's static 500 is

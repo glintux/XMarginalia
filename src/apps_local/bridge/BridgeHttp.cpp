@@ -76,7 +76,7 @@ void identify(freeink::SecureHttpClient& http, const std::string& url) {
 bool insufficientHeap(const Endpoint& endpoint, std::string& message) {
   const uint32_t freeHeap = ESP.getFreeHeap();
   const uint32_t maxBlock = ESP.getMaxAllocHeap();
-  if (freeHeap < 35000 || maxBlock < 20000) {
+  if (freeHeap < 20000 || maxBlock < 12000) {
     LOG_ERR(endpoint.tag, "heap too low for TLS: free=%u block=%u", freeHeap, maxBlock);
     message = "Not enough memory free to sync right now. Leave the app and open it again.";
     return true;

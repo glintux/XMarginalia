@@ -19,6 +19,9 @@
 #include <SPI.h>
 #include <TrustedTime.h>
 #include <VectorFontSupport.h>
+#include <DNSServer.h>
+#include <ESPmDNS.h>
+#include <WebServer.h>
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
@@ -199,7 +202,10 @@ constexpr uint32_t SILENT_REBOOT_TARGET_JOIN_NETWORK = 3;
 // 2026-09, and a fork value sitting on an upstream number would resume the
 // wrong screen the next time they add one. It moved from 3 to 4 when they did.
 constexpr uint32_t SILENT_REBOOT_TARGET_APP = 4;
-constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_APP;
+// File Transfer > Create Hotspot, entered the same way as Join Network:
+// reboot onto a pristine heap, then start the AP. Local addition (Picco).
+constexpr uint32_t SILENT_REBOOT_TARGET_HOTSPOT = 5;
+constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_HOTSPOT;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 
 // How the device is coming back to life, resolved once at boot. Both resume
@@ -221,7 +227,12 @@ static bool deepSleepInProgress = false;
 
 #if FREEINK_CAP_TOUCH
 static bool finishWifiSessionWithoutRestart() {
-  if (!BoardConfig::hasTouch()) return false;
+  // Picco is exempt from the touch rule: its touch and frontlight are
+  // re-initialized on every boot, and this fork already reboots it after
+  // storage handoffs. The in-place teardown leaves the WiFi stack degraded
+  // (netstack errors on exit, heap never recovers), so it takes the real
+  // restart like a non-touch board.
+  if (!BoardConfig::hasTouch() || BoardConfig::isPicco()) return false;
 
   // A software reset does not cycle externally powered touch/frontlight rails.
   // Shut down the network stack in place so those peripherals retain state.
@@ -283,10 +294,23 @@ void silentRestartToJoinNetwork() {
   // A software reset would cycle touch/frontlight rails; those boards proceed
   // into Join Network without the fresh-heap reboot (return, don't stop WiFi —
   // this runs on the way *in*, unlike the exit-time silentRestart()).
-  if (BoardConfig::hasTouch()) return;
+  // Picco is exempt (see finishWifiSessionWithoutRestart).
+  if (BoardConfig::hasTouch() && !BoardConfig::isPicco()) return;
 #endif
   armSilentReboot(SILENT_REBOOT_TARGET_JOIN_NETWORK);
   LOG_DBG("MAIN", "Silent restart (target=join-network)");
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  delay(50);
+  ESP.restart();
+}
+
+void silentRestartToHotspot() {
+  if (deepSleepInProgress) return;
+#if FREEINK_CAP_TOUCH
+  if (BoardConfig::hasTouch() && !BoardConfig::isPicco()) return;
+#endif
+  armSilentReboot(SILENT_REBOOT_TARGET_HOTSPOT);
+  LOG_DBG("MAIN", "Silent restart (target=hotspot)");
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
   ESP.restart();
@@ -846,6 +870,9 @@ void setup() {
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 #else
   LOG_INF("MAIN", "Device: %s", BoardConfig::ACTIVE.name);
+  LOG_INF("HEAP", "early setup: internal free %u max block %u, psram free %u",
+          static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
+          static_cast<unsigned>(ESP.getFreePsram()));
 #endif
 
   // SD Card Initialization
@@ -1157,6 +1184,10 @@ void setup() {
     // Rebooted on the way *into* File Transfer > Join Network for a fresh heap;
     // resume that flow directly instead of landing on home.
     activityManager.goToJoinNetwork();
+  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_HOTSPOT) {
+    // Rebooted on the way *into* File Transfer > Create Hotspot for a fresh
+    // heap; resume that flow directly.
+    activityManager.goToHotspot();
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_SETTINGS) {
     // Back out of the WiFi rows and the user is where they left off, not on Home.
     activityManager.goToSettings(SettingsSection::Network);

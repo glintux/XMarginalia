@@ -7,6 +7,8 @@
 // file and the two keys. The rules are in ForeheadCore.h (freestanding) and the
 // drawing is in ForeheadScreens.cpp (freestanding). See docs/apps/forehead.md.
 
+#include <Imu.h>
+
 #include <memory>
 
 #include "../../activities/Activity.h"
@@ -41,6 +43,19 @@ class ForeheadActivity final : public Activity {
   void routeAction(int action, int value);
   int secondsLeft() const;
 
+  // Tilt input for boards that have an IMU (the Picco's QMI8658; the X4 Pro
+  // has none, so this never arms there and the keys stay the only input).
+  // Polls the accelerometer during Play; returns true when a tilt consumed
+  // the card, so loop() stops there like it does for a key press.
+  bool pollTilt();
+  // The same nod, on the Ready card: any firm tilt starts the round, so the
+  // player never has to find a key blind to begin either.
+  bool pollTiltStart();
+  // Captures the upright reference the nod is measured against. Returns
+  // true once a stable one is held. See pollTilt() for why the reference is
+  // captured live instead of assumed from the board profile.
+  bool captureTiltBaseline(const Imu::Sample& sample);
+
   bool loadState();
   void saveState();
   void flushSave();
@@ -59,6 +74,23 @@ class ForeheadActivity final : public Activity {
 
   uint32_t startMs = 0;
   int lastTick = -1;
+
+  // Tilt state. imuReady is false on boards without an IMU (and in the
+  // simulator), which disables tilt entirely. tiltArmed is the hysteresis:
+  // a tilt fires once, then the device must come back near upright before
+  // the next card can be answered by tilt. tiltBaselineAz is the captured
+  // screen-normal accel of the upright hold the current nod is measured
+  // against; it is recaptured on every re-arm, so posture drift between
+  // cards never accumulates into a phantom tilt.
+  Imu imu;
+  bool imuReady = false;
+  bool tiltArmed = true;
+  bool tiltBaselineValid = false;
+  float tiltBaselineAz = 0.0f;
+  float tiltCandidateAz = 0.0f;
+  int tiltStablePolls = 0;
+  uint32_t tiltSettleUntilMs = 0;
+  uint32_t lastTiltPollMs = 0;
 
   // Eats the release edge of the key that was still held when the clock ran
   // out, so the buzzer cannot also turn the results page. See loop().

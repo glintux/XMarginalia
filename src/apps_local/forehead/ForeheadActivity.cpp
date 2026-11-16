@@ -4,10 +4,12 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include <cmath>
 #include <cstring>
 
 // GUI, for drawButtonHints. Included directly rather than inherited from
 // Toybox.h: a header pulled in only for a macro reads as unused to clangd.
+#include "../../CrossPointSettings.h"
 #include "../../components/UITheme.h"
 #include "../Shelf.h"
 #include "../ui/ToyboxFonts.h"
@@ -59,6 +61,54 @@ struct SaveState {
 constexpr auto kGotItKey = MappedInputManager::Button::Up;
 constexpr auto kPassKey = MappedInputManager::Button::Down;
 
+// TILT, ON BOARDS THAT HAVE AN IMU (the Picco; the X4 Pro this game was
+// written for has none -- see docs/apps/forehead.md section 1).
+//
+// The Picco's two page keys sit side by side on ONE edge, so in landscape
+// they land next to each other on the same edge instead of on opposite
+// edges like the X4 Pro's. Side by side is hard to tell apart blind, with
+// the device held to your forehead -- which is the one moment this game is
+// played by feel. The Picco carries a QMI8658 IMU, so the phone game's
+// original input works there: tilt face-down is GOT IT, face-up is PASS.
+// Keys and touch bands stay live; tilt is an additional input, not a
+// replacement, and on a board without an IMU nothing changes at all.
+//
+// Detection is BASELINE-RELATIVE, and v2 is the reason. v2 assumed the
+// SDK's board frame (gravity on the portrait X axis when held sideways)
+// and guarded on |ax|; on the real Picco that guard silently rejected
+// landscape nods while portrait tilts fired -- the IMU's in-plane axes on
+// this board are rotated against the assumed frame, so the gravity axis
+// in a landscape hold is not the one the code went looking for. The one
+// axis a nod always moves, whatever the in-plane rotation, is the
+// screen-normal (Z) axis: upright it sits near its hold value, and a nod
+// in either direction swings it by sin(nod angle). So the game captures
+// the upright hold's az as a baseline (stable, not flat, clean 1g read)
+// and fires on the DELTA from it. In-plane rotation cannot defeat a
+// measurement that never names an in-plane axis.
+//
+// kFaceDownSign still carries the one fact that cannot be derived from
+// the board profile: which way the IMU's Z axis points relative to the
+// panel on the Picco. +1 assumes az rises when the screen rotates to face
+// down. If a hardware test shows GOT IT and PASS swapped, flip this one
+// constant.
+constexpr float kFaceDownSign = 1.0f;
+// Delta from the captured upright baseline: ~27 degrees of nod to fire;
+// back within ~10 degrees of upright to re-arm and recapture.
+constexpr float kTiltTriggerG = 0.45f;
+constexpr float kTiltRearmG = 0.18f;
+// A baseline is only believable when the device is roughly upright (not
+// lying flat, where az is ~ +/-1) and the sample is a clean gravity read.
+constexpr float kTiltBaselineMaxAzG = 0.55f;
+constexpr float kTiltMinGravityG = 0.80f;
+constexpr float kTiltMaxGravityG = 1.25f;
+// Two consecutive polls within this band count as a stable hold.
+constexpr float kTiltStableBandG = 0.06f;
+constexpr uint32_t kTiltPollMs = 50;
+// Dead time after the ready card or a round starts: the starting key
+// press is still being released and the device may still be travelling
+// up to the forehead.
+constexpr uint32_t kTiltSettleMs = 700;
+
 // ScreenUp/ScreenDown are deliberately NOT used here even though they exist:
 // in LandscapeCounterClockwise they resolve to Button::Left and Button::Right,
 // which are PIN_UNASSIGNED on this board and can never fire, and the mapping is
@@ -72,6 +122,13 @@ std::unique_ptr<Activity> ForeheadActivity::create(GfxRenderer& renderer, Mapped
 
 void ForeheadActivity::onEnter() {
   Activity::onEnter();
+  // Probe the IMU once for the whole visit. begin() identifies the part and
+  // leaves it sampling; on a board without one it returns false and tilt
+  // stays off. (halTiltSensor owns a second handle on the same chip for the
+  // reader's tilt page turn; both configure a QMI8658 identically, and that
+  // state machine only polls inside the reader, so the two do not fight.)
+  imuReady = imu.begin();
+  LOG_INF("FRHD", "IMU %s; tilt input %s", imuReady ? "present" : "absent", imuReady ? "on" : "off");
   toybox::ensureFonts(renderer);
   if (!loadState()) {
     deck.reset();
@@ -88,6 +145,17 @@ void ForeheadActivity::onEnter() {
 void ForeheadActivity::onExit() {
   // The orientation is global. Leaving it turned would rotate the shelf.
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  if (imuReady) {
+    // Stand the IMU back down -- unless the reader's tilt page turn is
+    // enabled, whose state machine believes the chip is awake; leave it
+    // sampling for that consumer instead of pulling the rug out.
+    if (SETTINGS.tiltPageTurn != 0) {
+      imu.wake();
+    } else {
+      imu.sleep();
+    }
+    imuReady = false;
+  }
   flushSave();
   Activity::onExit();
 }
@@ -95,6 +163,13 @@ void ForeheadActivity::onExit() {
 void ForeheadActivity::go(const View next) {
   const bool turning = landscape(view) != landscape(next);
   view = next;
+  if (next == View::Ready) {
+    // Fresh tilt reference for the ready card: the device is usually still
+    // travelling from portrait to the forehead when this screen lands.
+    tiltBaselineValid = false;
+    tiltStablePolls = 0;
+    tiltSettleUntilMs = static_cast<uint32_t>(millis()) + kTiltSettleMs;
+  }
   if (turning) {
     renderer.setOrientation(landscape(next) ? GfxRenderer::Orientation::LandscapeCounterClockwise
                                             : GfxRenderer::Orientation::Portrait);
@@ -117,6 +192,11 @@ void ForeheadActivity::startRound() {
   round.begin(category, roundSeconds, deck, rng);
   startMs = static_cast<uint32_t>(millis());
   lastTick = -1;
+  tiltArmed = true;
+  tiltBaselineValid = false;
+  tiltStablePolls = 0;
+  tiltSettleUntilMs = startMs + kTiltSettleMs;
+  lastTiltPollMs = 0;
   swallowKeyRelease = false;
   resultPage = 0;
   go(View::Play);
@@ -291,6 +371,97 @@ void ForeheadActivity::routeAction(const int action, const int value) {
   }
 }
 
+bool ForeheadActivity::captureTiltBaseline(const Imu::Sample& sample) {
+  if (tiltBaselineValid) return true;
+  const float gravity = sqrtf(sample.ax * sample.ax + sample.ay * sample.ay + sample.az * sample.az);
+  if (gravity < kTiltMinGravityG || gravity > kTiltMaxGravityG) {
+    tiltStablePolls = 0;
+    return false;
+  }
+  if (sample.az > kTiltBaselineMaxAzG || sample.az < -kTiltBaselineMaxAzG) {
+    tiltStablePolls = 0;  // lying flat-ish: no believable upright reference here
+    return false;
+  }
+  if (tiltStablePolls > 0 && sample.az - tiltCandidateAz < kTiltStableBandG &&
+      tiltCandidateAz - sample.az < kTiltStableBandG) {
+    tiltStablePolls++;
+  } else {
+    tiltCandidateAz = sample.az;
+    tiltStablePolls = 1;
+  }
+  if (tiltStablePolls < 2) return false;
+  tiltBaselineAz = tiltCandidateAz;
+  tiltBaselineValid = true;
+  LOG_INF("FRHD", "tilt baseline az=%.2f (ax=%.2f ay=%.2f)", sample.az, sample.ax, sample.ay);
+  return true;
+}
+
+bool ForeheadActivity::pollTilt() {
+  if (!imuReady) return false;
+  const uint32_t now = static_cast<uint32_t>(millis());
+  if (now - lastTiltPollMs < kTiltPollMs) return false;
+  lastTiltPollMs = now;
+  if (now < tiltSettleUntilMs) return false;
+
+  Imu::Sample sample;
+  if (!imu.read(sample)) return false;
+  if (!captureTiltBaseline(sample)) return false;
+
+  const float nod = (sample.az - tiltBaselineAz) * kFaceDownSign;
+  if (!tiltArmed) {
+    // One answer per nod: the device has to come back near upright before
+    // tilt can answer the next card, so holding a tilt cannot machine-gun
+    // through the deck. Re-arming drops the baseline, so the next card's
+    // reference is the hold the player is actually in, not the last one.
+    if (nod > -kTiltRearmG && nod < kTiltRearmG) {
+      tiltArmed = true;
+      tiltBaselineValid = false;
+      tiltStablePolls = 0;
+    }
+    return false;
+  }
+
+  if (nod >= kTiltTriggerG) {
+    tiltArmed = false;
+    // The raw sample rides along so a serial capture can settle the
+    // kFaceDownSign question from evidence instead of by feel.
+    LOG_INF("FRHD", "tilt DOWN -> GOT IT (ax=%.2f ay=%.2f az=%.2f base=%.2f)", sample.ax, sample.ay, sample.az,
+            tiltBaselineAz);
+    routeAction(ui::ActionGot, 0);
+    return true;
+  }
+  if (nod <= -kTiltTriggerG) {
+    tiltArmed = false;
+    LOG_INF("FRHD", "tilt UP -> PASS (ax=%.2f ay=%.2f az=%.2f base=%.2f)", sample.ax, sample.ay, sample.az,
+            tiltBaselineAz);
+    routeAction(ui::ActionMissed, 0);
+    return true;
+  }
+  return false;
+}
+
+bool ForeheadActivity::pollTiltStart() {
+  if (!imuReady) return false;
+  const uint32_t now = static_cast<uint32_t>(millis());
+  if (now - lastTiltPollMs < kTiltPollMs) return false;
+  lastTiltPollMs = now;
+  if (now < tiltSettleUntilMs) return false;
+
+  Imu::Sample sample;
+  if (!imu.read(sample)) return false;
+  if (!captureTiltBaseline(sample)) return false;
+
+  // Either direction starts: the guesser cannot see the card yet, so there
+  // is no answer to get wrong -- a firm nod is just "go".
+  const float nod = (sample.az - tiltBaselineAz) * kFaceDownSign;
+  if (nod >= kTiltTriggerG || nod <= -kTiltTriggerG) {
+    LOG_INF("FRHD", "tilt -> START (ax=%.2f ay=%.2f az=%.2f base=%.2f)", sample.ax, sample.ay, sample.az,
+            tiltBaselineAz);
+    return true;
+  }
+  return false;
+}
+
 void ForeheadActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (view == View::Menu) {
@@ -333,6 +504,12 @@ void ForeheadActivity::loop() {
     }
     if (mappedInput.wasPressed(kPassKey)) {
       routeAction(ui::ActionMissed, 0);
+      return;
+    }
+
+    // Tilt, where the board has an IMU. Read after the keys: a deliberate
+    // key press is never queued behind a 50 ms sensor poll.
+    if (pollTilt()) {
       return;
     }
 
@@ -394,6 +571,13 @@ void ForeheadActivity::loop() {
     return;
   }
 
+  // So does a tilt, where the board has an IMU: same reasoning, one less
+  // thing to find blind. The keys stay live as the silent backup.
+  if (view == View::Ready && pollTiltStart()) {
+    startRound();
+    return;
+  }
+
   fui::InputSnapshot input;
   int tapX = 0;
   int tapY = 0;
@@ -440,6 +624,7 @@ void ForeheadActivity::render(RenderLock&&) {
     case View::HowTo: {
       ui::HowToModel model;
       model.page = howToPage;
+      model.tilt = imuReady;
       ui::buildHowTo(screen, model);
       break;
     }
@@ -447,6 +632,7 @@ void ForeheadActivity::render(RenderLock&&) {
       ui::ReadyModel model;
       model.category = category;
       model.roundSeconds = roundSeconds;
+      model.tilt = imuReady;
       ui::buildReady(screen, model);
       break;
     }
