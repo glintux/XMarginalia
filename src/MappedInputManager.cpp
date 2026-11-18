@@ -200,6 +200,29 @@ constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 
 bool MappedInputManager::hasTouch() const { return gpio.hasTouch(); }
 
+bool MappedInputManager::supportsMultiTouch() const { return gpio.hasTouch() && gpio.supportsMultiTouch(); }
+
+bool MappedInputManager::getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const {
+  if (!supportsMultiTouch()) return false;
+
+  const auto touch = gpio.getTouchSnapshot();
+  if (touch.count != 2 || touch.reportedCount != 2) return false;
+
+  renderer.tapToLogical(touch.contacts[0].nx, touch.contacts[0].ny, x1, y1);
+  renderer.tapToLogical(touch.contacts[1].nx, touch.contacts[1].ny, x2, y2);
+  return true;
+}
+
+bool MappedInputManager::getOneFingerTouch(int& x, int& y) const {
+  if (!supportsMultiTouch()) return false;
+
+  const auto touch = gpio.getTouchSnapshot();
+  if (touch.count != 1 || touch.reportedCount != 1) return false;
+
+  renderer.tapToLogical(touch.contacts[0].nx, touch.contacts[0].ny, x, y);
+  return true;
+}
+
 void MappedInputManager::rememberTouchHeldTime() const {
   touchHeldOverrideValid = true;
   touchHeldOverrideMs = gpio.lastTouchHeldMs();

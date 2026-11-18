@@ -89,6 +89,9 @@ class MappedInputManager {
   bool consumeSuppressedRelease() const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
+  bool supportsMultiTouch() const;
+  bool getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const;
+  bool getOneFingerTouch(int& x, int& y) const;
   bool wasScreenTapped(int& x, int& y) const;
   // Immediate press edge for drag handles, without the row-selection dwell.
   bool wasScreenTouchPressed(int& x, int& y) const;

@@ -111,6 +111,10 @@ class CrossPointHttpServer final : public WebServer {
   // HTTP_MAX_DATA_WAIT (5000 ms) per idle socket.
   // Returns true if a request was processed or is currently active.
   bool pumpClient() {
+#ifdef SIMULATOR
+    WebServer::handleClient();
+    return false;
+#else
     const unsigned long now = millis();
 
     // 1. Accept any waiting TCP connections into free slots (or evict an idle
@@ -166,6 +170,7 @@ class CrossPointHttpServer final : public WebServer {
 
     WebServer::handleClient();
     return true;
+#endif
   }
 
   void releaseRequestArguments() {
@@ -195,6 +200,7 @@ class CrossPointHttpServer final : public WebServer {
   }
 
  private:
+#ifndef SIMULATOR
   struct PendingClient {
     NetworkClient client;
     unsigned long acceptedAt = 0;
@@ -235,6 +241,9 @@ class CrossPointHttpServer final : public WebServer {
       }
     }
   }
+#else
+  void closePending() {}
+#endif
 
   size_t checkedWrite(const size_t wanted, const size_t sent) {
     if (sent < wanted && _currentClient.connected()) {

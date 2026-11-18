@@ -674,6 +674,31 @@ def main(env):
     # /api/status reports the factory MAC when the chip has one. A host has no
     # eFuse, so the honest answer is "none" and the field is simply left out.
     patch(
+        src / "HalDisplay.h",
+        "  const char* controllerName() const;",
+        "  const char* controllerName() const;\n"
+        "  void setReaderRefresh(bool) {}\n"
+        "  bool displayRetainedGrayscaleOverlay(uint16_t, uint16_t, uint16_t, uint16_t, bool) { return false; }",
+        "HalDisplay::setReaderRefresh & displayRetainedGrayscaleOverlay (no-op on host)",
+        marker="setReaderRefresh",
+    )
+    patch(
+        src / "HalDisplay.h",
+        "  const char* controllerName() const;",
+        "  const char* controllerName() const;\n"
+        "  void controllerIdle() {}",
+        "HalDisplay::controllerIdle (no-op on host)",
+        marker="controllerIdle",
+    )
+    patch(
+        src / "SecureHttpClient.h",
+        "  std::string getHeader(const std::string& name) const { return http_.getHeader(name); }",
+        "  std::string getHeader(const std::string& name) const { return http_.getHeader(name); }\n"
+        "  std::string getCombinedHeader(const std::string& name) const { return http_.getHeader(name); }",
+        "SecureHttpClient::getCombinedHeader (host alias for getHeader)",
+        marker="getCombinedHeader",
+    )
+    patch(
         src / "HalGPIO.h",
         "  bool hasTouch() const;",
         "  bool hasTouch() const;\n"
@@ -741,9 +766,52 @@ def main(env):
         src / "HalGPIO.h",
         "  bool hasTouch() const;",
         "  bool hasTouch() const;\n"
+        "  struct TouchContact {\n"
+        "    uint8_t id = 0;\n"
+        "    float nx = 0.0f;\n"
+        "    float ny = 0.0f;\n"
+        "  };\n"
+        "  struct TouchSnapshot {\n"
+        "    static constexpr uint8_t MAX_CONTACTS = 4;\n"
+        "    uint8_t count = 0;\n"
+        "    uint8_t reportedCount = 0;\n"
+        "    TouchContact contacts[MAX_CONTACTS];\n"
+        "  };\n"
+        "  bool supportsMultiTouch() const { return false; }\n"
+        "  TouchSnapshot getTouchSnapshot() const { return {}; }",
+        "HalGPIO multi-touch snapshot stubs (none on a host)",
+        marker="supportsMultiTouch",
+    )
+    patch(
+        src / "HalGPIO.h",
+        "  bool hasTouch() const;",
+        "  bool hasTouch() const;\n"
         "  bool hasFrontButtons() const { return false; }",
         "HalGPIO hasFrontButtons (none on a host)",
         marker="hasFrontButtons",
+    )
+    patch(
+        src / "HalGPIO.h",
+        "  bool hasTouch() const;",
+        "  bool hasTouch() const;\n"
+        "  bool isPowerButtonPhysicallyPressed() const { return false; }",
+        "HalGPIO::isPowerButtonPhysicallyPressed (none on host)",
+        marker="isPowerButtonPhysicallyPressed",
+    )
+    patch(
+        src / "WebServer.h",
+        "const int CONTENT_LENGTH_UNKNOWN = -1;",
+        "const int CONTENT_LENGTH_UNKNOWN = -1;\nconst int CONTENT_LENGTH_NOT_SET = -1;",
+        "WebServer CONTENT_LENGTH_NOT_SET",
+        marker="CONTENT_LENGTH_NOT_SET",
+    )
+    patch(
+        src / "WebServer.h",
+        "  void sendContent(const char *content, size_t len);",
+        "  void sendContent(const char *content, size_t len);\n"
+        "  void sendContent_P(const char *content, size_t len) { sendContent(content, len); }",
+        "WebServer::sendContent_P",
+        marker="sendContent_P",
     )
 
     patch(

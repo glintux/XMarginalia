@@ -94,6 +94,23 @@ class HalGPIO {
   // Cheap enough to call every few ms.
   bool rawInputActive();
   bool hasTouch() const;
+
+  // HAL-owned, normalized multi-touch representation (mirrors SDK capacity).
+  struct TouchContact {
+    uint8_t id = 0;
+    float nx = 0.0f;
+    float ny = 0.0f;
+  };
+
+  struct TouchSnapshot {
+    static constexpr uint8_t MAX_CONTACTS = InputManager::MAX_TOUCH_CONTACTS;
+    uint8_t count = 0;
+    uint8_t reportedCount = 0;
+    TouchContact contacts[MAX_CONTACTS];
+  };
+
+  bool supportsMultiTouch() const;
+  TouchSnapshot getTouchSnapshot() const;
   // True when the board has physical front buttons (Back/Confirm/Left/Right),
   // e.g. Xteink X4, X3, X4 Classic, OnePage. False on touch-only or side-only boards (Picco, X4 Pro, Sticky).
   bool hasFrontButtons() const;
