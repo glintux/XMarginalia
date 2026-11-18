@@ -23,6 +23,7 @@
 #include "../../src/apps_local/connectfour/ConnectFourScreens.h"
 #include "../../src/apps_local/connections/ConnectionsScreens.h"
 #include "../../src/apps_local/dungeon/DungeonScreens.h"
+#include "../../src/apps_local/einkboy/EinkBoyScreens.h"
 #include "../../src/apps_local/forehead/ForeheadScreens.h"
 #include "../../src/apps_local/go/GoScreens.h"
 #include "../../src/apps_local/hackernews/HackerNewsScreens.h"
@@ -15611,6 +15612,112 @@ int main() {
   everyBandCarriesItsRule();
   yahtzeeScreensClearTheChrome();
   yahtzeeDiceClearTheHeader();
+
+  {
+    einkboyui::LibraryModel lib;
+    lib.totalGames = 3;
+    lib.favoriteCount = 1;
+    lib.recentCount = 1;
+    lib.visibleCount = 3;
+    lib.pageCount = 1;
+    lib.pageItemCount = 3;
+    lib.recentTitle = "TETRIS";
+    lib.items[0] = {"TETRIS", "GB *"};
+    lib.items[1] = {"LINKS AWAKENING", "GB"};
+    lib.items[2] = {"ORACLE OF SEASONS", "GBC"};
+    Rendered libScreen;
+    {
+      const fui::DeviceContext ctx = device();
+      const fui::InputSnapshot noInput{};
+      toybox::Frame frame(libScreen.target, ctx, noInput, libScreen.interactions);
+      toybox::Screen screen(frame, toybox::themeTokens());
+      einkboyui::buildLibrary(screen, lib);
+    }
+    CHECK(libScreen.target.drew("EINKBOY"));
+    CHECK(libScreen.target.drew("TETRIS"));
+    CHECK(libScreen.has(einkboyui::ActionSelectRom));
+    CHECK(libScreen.has(einkboyui::ActionOpenSettings));
+    CHECK(libScreen.has(einkboyui::ActionExitApp));
+  }
+  {
+    einkboyui::LibraryModel empty;
+    Rendered emptyScreen;
+    {
+      const fui::DeviceContext ctx = device();
+      const fui::InputSnapshot noInput{};
+      toybox::Frame frame(emptyScreen.target, ctx, noInput, emptyScreen.interactions);
+      toybox::Screen screen(frame, toybox::themeTokens());
+      einkboyui::buildLibrary(screen, empty);
+    }
+    CHECK(emptyScreen.target.drew("NO ROMS FOUND"));
+  }
+  {
+    einkboyui::GameActionsModel act;
+    act.title = "TETRIS";
+    act.typeLabel = "GB";
+    act.isFavorite = false;
+    act.hasSave = true;
+    Rendered actScreen;
+    {
+      const fui::DeviceContext ctx = device();
+      const fui::InputSnapshot noInput{};
+      toybox::Frame frame(actScreen.target, ctx, noInput, actScreen.interactions);
+      toybox::Screen screen(frame, toybox::themeTokens());
+      einkboyui::buildGameActions(screen, act);
+    }
+    CHECK(actScreen.target.drew("PLAY GAME"));
+    CHECK(actScreen.has(einkboyui::ActionPlayRom));
+    CHECK(actScreen.has(einkboyui::ActionBackToLibrary));
+  }
+  {
+    einkboyui::InGameMenuModel pause;
+    pause.title = "TETRIS";
+    pause.saveStatus = "SAVED";
+    pause.portrait = true;
+    Rendered pauseScreen;
+    {
+      const fui::DeviceContext ctx = device();
+      const fui::InputSnapshot noInput{};
+      toybox::Frame frame(pauseScreen.target, ctx, noInput, pauseScreen.interactions);
+      toybox::Screen screen(frame, toybox::themeTokens());
+      einkboyui::buildInGameMenu(screen, pause);
+    }
+    CHECK(pauseScreen.target.drew("PAUSED"));
+    CHECK(pauseScreen.target.drew("EXIT EINKBOY"));
+    CHECK(pauseScreen.has(einkboyui::ActionPauseRow));
+    CHECK(pauseScreen.has(einkboyui::ActionResumeGame));
+  }
+  {
+    einkboyui::SettingsModel set;
+    set.fromGame = true;
+    Rendered setScreen;
+    {
+      const fui::DeviceContext ctx = device();
+      const fui::InputSnapshot noInput{};
+      toybox::Frame frame(setScreen.target, ctx, noInput, setScreen.interactions);
+      toybox::Screen screen(frame, toybox::themeTokens());
+      einkboyui::buildSettings(screen, set);
+    }
+    CHECK(setScreen.target.drew("SETTINGS"));
+    CHECK(setScreen.target.drew("UP BUTTON"));
+    CHECK(setScreen.has(einkboyui::ActionSettingRow));
+    CHECK(setScreen.has(einkboyui::ActionCloseSettings));
+  }
+  {
+    einkboyui::NoticeModel notice;
+    notice.headline = "UNSUPPORTED HARDWARE";
+    notice.detail = "Requires PSRAM";
+    Rendered noticeScreen;
+    {
+      const fui::DeviceContext ctx = device();
+      const fui::InputSnapshot noInput{};
+      toybox::Frame frame(noticeScreen.target, ctx, noInput, noticeScreen.interactions);
+      toybox::Screen screen(frame, toybox::themeTokens());
+      einkboyui::buildNotice(screen, notice);
+    }
+    CHECK(noticeScreen.target.drew("UNSUPPORTED HARDWARE"));
+    CHECK(noticeScreen.has(einkboyui::ActionDismissNotice));
+  }
 
   std::printf("chrome probe: %d header renders measured, %d renders had no band\n", chromeScreensMeasured,
               chromeScreensSkipped);
