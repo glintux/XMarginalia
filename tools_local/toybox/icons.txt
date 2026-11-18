@@ -469,3 +469,8 @@ wordle_delete = delete
 # TABLETOP suite. `dices` is two tumbling cubes with pips, the universal
 # mark for tabletop and board games.
 tabletop      = dices
+
+# EINKBOY Game Boy / Color emulator. `gamepad-directional` is a clean four-way
+# D-pad cross whose silhouette stays sharp at 32px in 1-bit without the mush
+# of `gamepad-2`.
+einkboy       = gamepad-directional

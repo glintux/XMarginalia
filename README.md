@@ -27,7 +27,7 @@ devices with an 800x480 panel (480x800 portrait on Picco), capacitive touch and 
 [CrossPoint](https://crosspointreader.com/) already makes them good at reading.
 **XMarginalia** (CrossMarginalia) is a new e-reader and tabletop firmware product built as a fork of
 **CrossPoint**, **CrossInk**, and **CrossPlay**. It unifies CrossPoint's EPUB engine & SD plugin system, CrossInk's UI themes,
-status bar customization (including restored **Bottom Mid-Left / Mid-Right** clock slots), reading stats, and typography controls, CrossPlay's **26 games and 8 apps**,
+status bar customization (including restored **Bottom Mid-Left / Mid-Right** clock slots), reading stats, and typography controls, CrossPlay's **27 games and 8 apps**,
 the **11-mode Tabletop suite**, **BOOX Picco** & **EEGO A4** hardware support, **Nearby File Transfer**, an official **Audiobookshelf SD Plugin** (`plugins/audiobookshelf/`), and an optional spoiler-free **AI Companion**.
 
 ## Try it without a device
@@ -76,6 +76,7 @@ the import lands a real pack instead of failing on an unreachable host.
 | **Underhand**    | The 2017 cult card game: bribe, sacrifice, dodge the police, summon a god.   |
 | **Wordle**       | Six guesses for the day's word, with every past day in an archive.           |
 | **Tabletop**     | 10 classic board, tile & dice games plus a virtual sandbox, solo/2P/nearby.  |
+| **EinkBoy**      | Game Boy & Game Boy Color emulator for `.gb`/`.gbc` ROMs on your SD card.    |
 
 ### Tabletop Suite
 

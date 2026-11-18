@@ -19,6 +19,7 @@
 #include "connectfour/ConnectFourActivity.h"
 #include "connections/ConnectionsActivity.h"
 #include "dungeon/DungeonActivity.h"
+#include "einkboy/EinkBoyActivity.h"
 #include "forehead/ForeheadActivity.h"
 #include "go/GoActivity.h"
 #include "hackernews/HackerNewsActivity.h"
@@ -81,6 +82,7 @@ constexpr shelf::Item kGames[] = {
     {"UNDERHAND", &icon_underhand_32, &UnderhandActivity::create},
     {"WORDLE", &icon_wordle_32, &WordleActivity::create},
     {"TABLETOP", &icon_tabletop_32, &TabletopActivity::create},
+    {"EINKBOY", &icon_einkboy_32, &EinkBoyActivity::create},
 };
 constexpr shelf::Item kApps[] = {
     {"STUDY", &icon_study_32, &StudyActivity::create},
