@@ -55,6 +55,16 @@ Chan), whose independently compiled table this one is checked against byte for
 byte. Full text at `assets_local/go/LICENSE-ardugo`, with the derivation in
 `assets_local/go/README.md`.
 
+**Peanut-GB** (`lib/PeanutGB/src/peanut_gb.h`), MIT, Copyright (c) 2018-2023
+Mahyar Koshkouei, incorporating portions from
+[SameBoy](https://github.com/LIJI32/SameBoy/) (MIT, Copyright (c) 2015-2019
+Lior Halphon). **Walnut-CGB** (`lib/WalnutCGB/src/walnut_cgb.h`), MIT, Copyright
+(c) 2025-2026 [Mr. Paul](https://github.com/Mr-PauI). EinkBoy's emulator glue,
+Floyd-Steinberg CGB ditherer, and Game Boy app architecture are adapted from
+[Ink-boy](https://github.com/hellominecraft913-dev/Ink-boy) (MIT). Full license
+headers are preserved in `lib/PeanutGB/src/peanut_gb.h` and
+`lib/WalnutCGB/src/walnut_cgb.h`.
+
 **Libraries linked into the build**, each under its own licence as published:
 
 | Library               | Author          |

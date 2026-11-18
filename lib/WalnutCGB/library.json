@@ -1,0 +1,16 @@
+{
+  "name": "WalnutCGB",
+  "version": "1.0.0",
+  "description": "Walnut-CGB Game Boy Color emulator core",
+  "keywords": [
+    "gameboy-color",
+    "emulator",
+    "cgb",
+    "monochrome"
+  ],
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src"
+  }
+}
