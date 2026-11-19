@@ -4,47 +4,116 @@
 </h1>
 
 <p align="center">
-  <strong>E-ink is good at waiting.</strong><br>
-  So is a chess position, a flashcard, a puzzle you are halfway through.
+  <strong>Reading in the margins &mdash; on e-ink.</strong><br>
+  A unified reading, Audiobookshelf, spoiler-free AI companion, and tabletop firmware for ESP32-S3 e-readers.
 </p>
 
 <p align="center">
-  <a href="https://crossplay.ma-r-s.com">Try it in your browser</a> &middot;
+  <a href="#why-xmarginalia-exists">Why XMarginalia Exists</a> &middot;
+  <a href="#spoiler-free-ai-companion-companion-bridge">AI Companion</a> &middot;
+  <a href="#audiobookshelf-sd-plugin">Audiobookshelf</a> &middot;
   <a href="#what-is-on-it">What is on it</a> &middot;
   <a href="#install-it">Install it</a> &middot;
-  <a href="https://github.com/ma-r-s/crossplay/releases">Releases</a>
+  <a href="https://github.com/glintux/XMarginalia/releases">Releases</a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/ma-r-s/crossplay/actions/workflows/crossplay-ci.yml"><img src="https://github.com/ma-r-s/crossplay/actions/workflows/crossplay-ci.yml/badge.svg?branch=xteink" alt="Build status"></a>
-</p>
+![XMarginalia on e-ink hardware](site/assets/shots/og.png)
 
-![CrossPlay on the Xteink X4 Pro](site/assets/shots/og.png)
+## Why XMarginalia Exists
 
-The **Xteink X4 Pro**, **Seeed reTerminal Sticky**, **M5Stack PaperMono / Lite**, **Onyx BOOX Picco**, and **EEGO A4** are e-ink
-devices with an 800x480 panel (480x800 portrait on Picco), capacitive touch and physical buttons
-(three on the Sticky; the design uses the two shared buttons), and
-[CrossPoint](https://crosspointreader.com/) already makes them good at reading.
-**XMarginalia** (CrossMarginalia) is a new e-reader and tabletop firmware product built as a fork of
-**CrossPoint**, **CrossInk**, and **CrossPlay**. It unifies CrossPoint's EPUB engine & SD plugin system, CrossInk's UI themes,
-status bar customization (including restored **Bottom Mid-Left / Mid-Right** clock slots), reading stats, and typography controls, CrossPlay's **27 games and 8 apps**,
-the **11-mode Tabletop suite**, **BOOX Picco** & **EEGO A4** hardware support, **Nearby File Transfer**, an official **Audiobookshelf SD Plugin** (`plugins/audiobookshelf/`), and an optional spoiler-free **AI Companion**.
+Dedicated e-ink readers such as the **Xteink X4 Pro**, **Onyx BOOX Picco**, **EEGO A4 / A4 Lite**, **Seeed reTerminal Sticky**, and **M5Stack PaperMono / Lite** shine when they keep you inside a book or a thoughtful game without phone notifications or glare. Upstream firmware projects each solved part of that puzzle separately: **CrossPoint Reader** built the fast EPUB/XTC engine and SD plugin host, **CrossInk** refined themes, typography, modular status bars, reading stats, and gesture controls, and **CrossPlay** added a full e-ink game/app shelf and BOOX Picco bring-up.
 
-## Try it without a device
+**XMarginalia** unifies all three codebases into one cohesive firmware and adds the reading-companion infrastructure missing from each upstream:
 
-[**crossplay.ma-r-s.com**](https://crossplay.ma-r-s.com) runs the real firmware
-in the browser: the same `src/` and `lib/` the device build compiles, put
-through `em++` instead of `g++`, against an SD card of its own. Click the screen
-in the hero, or ask for two devices and watch them find each other.
+1. **Spoiler-Free AI Companion (`companion-bridge`)**: Look up *"Who is this?"*, *"What is this?"*, *"Explain"*, *"Where was I?"*, and *"Recap chapter so far"* right from your current page—strictly truncated at or before what you have already read so answers never spoil later chapters.
+2. **First-Class Self-Hosted Audiobookshelf Integration**: Browse your Audiobookshelf libraries, download EPUBs with metadata sidecars, link existing SD card books without re-downloading, queue offline progress pushes, and perform two-way EPUB CFI sync straight from the reader menu—with zero intermediate OPDS or external sync daemon required.
+3. **Unified Reader Experience Across Three Upstreams**: CrossPoint's EPUB/XTC engine and SD plugin runtime, CrossInk's **Minimal** & **Dashboard** themes, restored **5-slot Bottom Status Bar**, **Focus Reading**, **Controls 2.0**, **Reading Statistics**, and **Nearby CIFT Transfer**, alongside CrossPlay's **27 games and 8 apps** (including the **11-mode Tabletop suite**).
+4. **Broad Hardware & Safe Flashing Coverage**: Ships verified release images for **X4 Pro**, **BOOX Picco** (preserving vendor `safeboot` via app-only `0xE0000` writes), and **EEGO A4 / A4 Lite**, backed by all-PSRAM wolfSSL TLS buffers, PSRAM display shadow buffers, hardened OPDS parsing, and zero-rebuild USB tooling.
 
-It is the real thing rather than a video, with three things faked, all listed
-in [site/README.md](site/README.md): the network answers from a snapshot,
-Study's headword font is a smaller cut standing in for the large one, and sleep
-is off. The snapshot is also what put Connections in the browser at all: the
-build answers its archive fetch from a 40-puzzle slice of the real thing, so
-the import lands a real pack instead of failing on an unreachable host.
+For a file-by-file breakdown of everything XMarginalia adds or changes relative to CrossPoint, CrossInk, and CrossPlay, see [docs/xmarginalia-differences.md](docs/xmarginalia-differences.md) and [docs/picco.md](docs/picco.md).
+
+---
+
+## Companion Features & Major Additions
+
+### Spoiler-Free AI Companion (`companion-bridge`)
+
+Implemented across [`src/apps_local/companion/`](src/apps_local/companion/), [`ClipSelectionActivity`](src/activities/reader/ClipSelectionActivity.cpp), [`EpubReaderActivity`](src/activities/reader/EpubReaderActivity.cpp), and the self-hosted Python/Docker service in [`server/companion-bridge/`](server/companion-bridge/README.md) (full architecture and deployment guide in [docs/companion.md](docs/companion.md)):
+
+- **Five In-Reader Actions**:
+  - From word or passage selection: **Who is this?** (`who_is`), **What is this?** (`what_is`), and **Explain** (`explain`).
+  - From the Reader menu: **Where was I?** (`recap_story`) and **Recap chapter so far** (`recap_chapter`).
+- **Three-Tier Intra-Chapter Spoiler Gate (`CutoffResolver`)**:
+  1. **`anchor_exact`**: Captures up to ~140 characters from the end of your visible page (`extractPageAnchorText`), matches that passage inside the indexed book chunks, and truncates any straddling chunk immediately after that sentence—immune to Calibre HTML file splits or EPUB repacks.
+  2. **`chapter_progress`**: Falls back to `chapter_title` / `spine_index` scaled by `chapter_progress` minus a **3%** safety margin.
+  3. **`book_progress`**: Falls back to whole-book progress minus a **2%** safety margin across cumulative text codepoints.
+- **Multi-Tier Book Matching (`BookResolver`)**:
+  - Matches `abs_item_id` (from Audiobookshelf `<book>.meta.json` sidecars), `<dc:identifier>` UUID, ISBN, ASIN, and KOReader MD5 (`ko_md5`), falling back to normalized `title + author` / filename fuzzy matching (`>= 82%` via RapidFuzz) and corpus-wide `anchor_text` search when metadata differs.
+- **Book-Focused Retrieval & Entity Masking (`SpoilerFreeRetriever`, `EntityMasker`)**:
+  - Character and term lookups combine the **first mention**, **most recent pre-cutoff mentions**, **current-page chunks**, and **hybrid BM25 + dense vector search** (`BAAI/bge-small-en-v1.5` via CPU `fastembed_cpu` by default, or `EMBEDDING_PROVIDER=none` for pure BM25 with zero embedding RAM).
+  - Optional proper-noun masking (`COMPANION_ENTITY_MASKING=1`, `[ENTITY_N]` placeholders restored after generation) prevents pre-trained LLM memory bleed on well-known novels.
+  - Works with any OpenAI-compatible `/v1/chat/completions` endpoint (LocalAI, llama.cpp, vLLM), with `LOCALAI_CHAT_MODEL=auto` auto-selecting from loaded models in `LOCALAI_MODEL_PREFERENCE` and suppressing `<think>` reasoning chains on `qwen3*` models.
+- **Device Memory, TLS & Radio Discipline (`CompanionClient`, `EpubReaderActivity`)**:
+  - Before waking Wi-Fi, stops any active BLE page turner and releases rebuildable reader state (`section`, `epub`, `CLIPPINGS`, overlay page, image render cache, and SD font caches) to maximize internal SRAM alongside PSRAM-backed wolfSSL buffers.
+  - Wakes saved Wi-Fi on demand, sends `POST /api/ereader/v1/query` with `X-API-Key` and `Authorization: Bearer` headers (optional custom CA trust roots at `/.crosspoint/companion-roots.pem`), tears the radio right back down afterward, reloads cached EPUB state, and renders the reply in a paginated reader view using your active font (`SETTINGS.getReaderFontId()`) and line spacing (`SETTINGS.getReaderLineCompression()`).
+- **Quick Configuration**:
+  - Place `/.crosspoint/companion.json` on the SD card (or set `companion_host` / `companion_url` and `companion_api_key` in the Audiobookshelf plugin config as a fallback):
+    ```json
+    {
+      "host": "companion.example.com",
+      "api_key": "replace-with-a-long-random-secret",
+      "enabled": true
+    }
+    ```
+  - For plain HTTP on a trusted private LAN (e.g. `192.168.1.50:8095`), add `"use_http": true`.
+  - **Reverse Proxy & Hardening**: Container config (`server/companion-bridge/compose.localai.yaml`) uses `cap_drop: [ALL]`, `no-new-privileges:true`, lazy LRU book parsing (`COMPANION_BOOK_CACHE=3`), and per-IP rate limiting / auth lockouts. A Caddy snippet ([`Caddyfile.snippet`](server/companion-bridge/deploy/Caddyfile.snippet)) lets `/api/ereader/*` bypass interactive SSO (such as Authelia) cleanly when validated by `X-API-Key`. Keep `companion-bridge` on your LAN or behind a private VPN (WireGuard/Tailscale) whenever possible.
+
+---
+
+### Audiobookshelf SD Plugin
+
+Bundled at [`plugins/audiobookshelf/`](plugins/audiobookshelf/README.md) and packaged as `xmarginalia-audiobookshelf-plugin.zip` in every release:
+
+- **Direct Library Browsing & Search**: From **Home -> Plugins -> Audiobookshelf**, browse **Continue Reading**, **Recently Added**, **By Title (A-Z)**, and **By Author (A-Z)**, or run **Search Books** and **Search by Author** (with author-to-books drill-down), view descriptions, and download EPUBs to `/Books/Audiobookshelf/` (configurable).
+- **Zero-Duplicate Linking for Existing SD Books**: In the local Web UI (`/plugins`), **Sync Existing SD Card Books** scans EPUBs already stored on your SD card, matches them to Audiobookshelf items, and writes `<book>.epub.meta.json` (`abs_item_id` + metadata) without re-downloading.
+- **Offline Outbox & Two-Way CFI Progress Sync**: Closing a linked book queues progress (`ebookProgress`, `isFinished`) offline until the next Wi-Fi session. Inside any linked EPUB, **Reader Menu -> Sync Progress** performs two-way sync using both `ebookProgress` and `ebookLocation` (EPUB CFI), prompting between **Audiobookshelf** and **KOReader Sync** if both are enabled.
+- **Secure Credential Storage**: Supports username/password sign-in (device-bound obfuscated on SD as `password_obf`, never returned over HTTP) or direct Audiobookshelf API tokens.
+
+---
+
+### CrossInk UI, Themes, Typography, Controls 2.0 & Stats
+
+XMarginalia brings full CrossInk UI/reader parity and CrossPoint plugin compatibility onto the unified S3 firmware:
+
+- **Themes & Restored 5-Slot Modular Status Bar**: Adds **Minimal** and **Dashboard** UI themes alongside **Lyra**, **Classic**, **Lyra Extended**, and **Rounded Raff**. Customizes independent Top (`topLeft`, `topCenter`, `topRight`) and restored **Bottom 5-slot** (`bottomLeft`, `bottomMidLeft`, `bottomCenter`, `bottomMidRight`, `bottomRight`) lanes plus Top/Bottom progress bar placement and EEGO A4 inset progress rendering.
+- **Focus Reading & Per-Book Typography**: Adds `focusReadingEnabled` (bionic prefix emphasis), **Guide Dots**, word/character spacing controls, and per-book overrides (`BookSettings`, `effectiveScreenMargin()`) independent of global reader defaults.
+- **OPDS Catalog Browser**: Relocated under **File Transfer / Network Mode Selection** so the Home screen stays focused on reading and your shelf. Enhanced in firmware and `freeink-sdk` with unified `HttpDownloader` connection handling, Basic Auth fallback, `www-authenticate` capture, and 2-attempt 401/redirect retries alongside PSRAM Expat parsing.
+- **Controls 2.0 (Touch, Edge Slides, Tilt & Hardware Recovery)**: Adds the `touchReaderControls` master toggle, configurable forward/previous gesture filters (`pageTurnGesture`, `previousPageGesture`), **Edge Gestures** (`edgeGesturesEnabled`, `edgeLeftAction`, `edgeRightAction` for Warm/Cool frontlight slides), **Tilt Sensitivity** (`tiltSensitivity`), side-button long-press & combo bindings, Picco **Up + Down** hardware recovery outside the reader to re-enable touch, CrossInk `doubleClickPwrLight` & `SHORT_PWRBTN` mappings (`PWR_CONFIRM`, `PWR_BOOKMARK`, `PWR_SYNC`, `PWR_READER_MENU`), `!Frontlight.present()` double-click suppression, and orientation-aware dictionary side buttons.
+- **Reading Statistics & Multi-Device Sync**: Tracks daily/total reading time, pages turned, reading speed, and active reading streaks per book and globally (`BookStatsActivity`), with multi-device stats sync support.
+
+---
+
+### Nearby Book & Wallpaper Transfer (CIFT over ESP-NOW)
+
+In addition to **PLAY NEARBY** multiplayer games, readers can exchange books and wallpapers directly between devices with no router, pairing screen, or IP setup:
+
+- Choose **Send to Nearby Device** from the book options menu in the **Library** or **File Browser**, and **Receive File** under **File Transfer** on the receiving reader.
+- Compatible across **Onyx BOOX Picco**, **Xteink X4 Pro**, **EEGO A4**, and **CrossInk** devices.
+
+---
+
+### Hardware Profiles, Panel Safety & `freeink-sdk`
+
+- **Onyx BOOX Picco (`picco` / `gh_release_picco`)**: Native 480×800 portrait layout, TMA525C touch, Up/Down side keys, warm/cool frontlight, hardware sleep toggle switch, `FREEINK_FB_PSRAM=1` framebuffers, absolute grayscale clearing order, and strict `0xE0000` app-only upload/build guards (`scripts/app_only_upload.py` + `scripts_local/app_slot_guard.py`) that keep the factory bootloader, NVS, and `safeboot` recovery partition (`0x20000`) intact. See [docs/picco.md](docs/picco.md).
+- **EEGO Reader A4 / A4 Lite (`eego_a4` / `gh_release_eego_a4`)**: 768×552 UC8279C panel + GSLX680 touch with `500 ms` controller idle, `400 ms` wake hold + `+400 ms` hold duration, slim inset bottom progress bar respecting rounded glass corners, automatic `HALF_REFRESH` cleanup when leaving the reader, and factory MAC UID readout (`HalSystem::getEegoUid()`) in **About**.
+- **`freeink-sdk` (`glintux/freeink-sdk`, branch `xmarginalia/sdk-20261117`)**: Moves wolfSSL allocations (`ensureWolfAllocators()`) and display `_asyncShadow` buffers into external PSRAM across **all** `BOARD_HAS_PSRAM` boards (freeing ~40–60 KB of internal DRAM for Wi-Fi DMA RX/TX buffers during simultaneous TLS sessions) and adds OPDS feed/auth/error-logging fixes.
+- **Upstream Reliability Sync**: Captures CrossPlay `v1.15.1` panel/reader/app fixes (`#4362` retained grayscale overlay & reader refresh scopes, `#4469` SD font-cache release, `#4444` bottom margin, `#4460` `OptionPopup` scroll, `#4473` plugin `<` chevron, `#4450` Show File Extensions, `#4509` Hide New Files in Recent & Settings Refresh Library, `ClockFloor` build-date floor, `HttpDownloader` unified door, Study paging/glyph lists, Notes edit label, Wikipedia install margins).
+
+---
 
 ## What is on it
+
+**XMarginalia** preserves upstream CrossPlay's **27 games and 8 apps** shelf alongside **Tabletop**'s 10 competitive games and 4 sandbox tools (experimental `apps_local/rss/` is intentionally omitted to preserve flash headroom):
 
 ### Games
 
@@ -65,7 +134,7 @@ the import lands a real pack instead of failing on an unreachable host.
 | **Knucklebones** | Cult of the Lamb's dice game. Matching dice multiply; yours destroy theirs.  |
 | **Minesweeper**  | Tap to dig, hold to flag, tap a finished number to chord its neighbours.     |
 | **Sudoku**       | Generated on the device and graded by the technique it needs, not the clues. |
-| **Picross**     | Fill the grid from the clues and a picture appears. Wrong fills lock in.     |
+| **Picross**      | Fill the grid from the clues and a picture appears. Wrong fills lock in.     |
 | **Sea Salt**     | Sea Salt & Paper: collect duos, bet on STOP or LAST CHANCE.                  |
 | **Toy Battle**   | Nine boards of bases and paths. Hold regions, take medals, solo or nearby.   |
 | **Forehead**     | Screen against your forehead, the room shouts clues, sixty seconds.          |
@@ -80,25 +149,10 @@ the import lands a real pack instead of failing on an unreachable host.
 
 ### Tabletop Suite
 
-**Tabletop** (`src/apps_local/tabletop/`, full rules in [docs/apps/tabletop.md](docs/apps/tabletop.md)) packs 10 competitive games and a 4-tool virtual sandbox into a paginated e-ink lobby:
+**Tabletop** ([`src/apps_local/tabletop/`](src/apps_local/tabletop/), full rules in [docs/apps/tabletop.md](docs/apps/tabletop.md)) packs 10 competitive games and a 4-tool virtual sandbox into a paginated e-ink lobby:
 
 - **Competitive Games** (Solo AI, 2P Pass-and-Play with 180° table flip on board games, and **PLAY NEARBY** ESP-NOW multiplayer): **Reversi / Othello**, **Mancala / Kalah**, **Nine Men's Morris**, **Onitama**, **Liar's Dice / Perudo**, **Dobutsu Shogi / Catch the Lion**, **Backgammon**, **Santorini**, **Quoridor**, and **Dominoes** (with `[ CONCEAL ]` / `[ PEEK ]` hand privacy).
 - **Tabletop Sandbox**: **Dice Cup** (1–6 dice, D4–D20, hold/lock), **Playing Cards** (52-card deck with secret hand privacy), **Life & Point Counters** (4-player), and a **Freeform 8×8 Token Board**.
-
-### Reader, CrossInk Parity & BOOX Picco
-
-XMarginalia brings CrossPlay up to parity with **CrossPoint** and **CrossInk** while adding **BOOX Picco** compatibility:
-
-- **CrossInk UI & Reader**: CrossInk UI themes, customizable status bar items (including Left / Mid-Left / Center / Mid-Right / Right bottom lanes), OPDS catalog browser under **File Transfer**, Phase 4 typography/layout and guide dots, tilt sensitivity setting, reading statistics and streaks with multi-device sync, and a unified controls hierarchy.
-- **Direct Audiobookshelf SD Plugin (`plugins/audiobookshelf/`)**: Browse libraries, search books, download EPUBs with `.meta.json` sidecars, queue offline progress pushes, and run two-way progress sync directly against Audiobookshelf from **Home → Plugins** and **Reader Menu → Sync Progress** without an external OPDS or KOSync server.
-- **Nearby File Transfer (CIFT)**: Send and receive EPUBs and wallpapers directly over ESP-NOW between **Onyx BOOX Picco**, **Xteink X4 Pro**, and **CrossInk** devices (`Send to Nearby Device` / `Receive File`).
-- **BOOX Picco & EEGO A4 Support**: Native 480×800 portrait layout, hardware toggle switch sleep control, PSRAM display and all-PSRAM wolfSSL TLS buffers (`freeink-sdk`), app-only `0xE0000` flashing (Picco), and **EEGO A4 / A4 Lite** (`eego_a4` / `gh_release_eego_a4`) builds.
-
-For a full itemized breakdown of everything in XMarginalia that differs from upstream CrossPoint, CrossInk, and CrossPlay, see [docs/xmarginalia-differences.md](docs/xmarginalia-differences.md) and [docs/picco.md](docs/picco.md).
-
-### Spoiler-Free AI Companion
-
-While reading an EPUB, you can select a word/passage for **Who is this?**, **What is this?**, or **Explain**, or open the reader menu for **Where was I?** and **Recap chapter so far**. Queries are strictly gated to text at or before your current page (`anchor_exact` $\rightarrow$ `chapter_progress` $\rightarrow$ `book_progress`), displayed in a paginated viewer using your reader font and line-spacing settings, and backed by the self-hosted [`companion-bridge`](server/companion-bridge/README.md) server and an OpenAI-compatible LLM (such as LocalAI). See [docs/companion.md](docs/companion.md) for how it works, Docker/Caddy setup instructions, and security guidance.
 
 ### Apps
 
@@ -113,237 +167,133 @@ While reading an EPUB, you can select a word/passage for **Who is this?**, **Wha
 | **Calculator**  | A calculator with keys the size of a thumb, and the sums you already did. |
 | **Notes**       | Lists you tick with one hand, kept as plain text files on the card.      |
 
-Don't want all of them? Tap GAMES or APPS at the top of the list on your device and
-untick what you don't play.
-
-And the reader is still CrossPoint's reader: the EPUB engine, sync and the file
-browser are theirs and stay theirs.
+Don't want all of them? Tap **GAMES** or **APPS** at the top of the list on your device and untick what you don't play.
 
 ### Two devices, nothing to type
 
-Twelve of the games play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
-Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt, Toy Battle, Go, Hex and
-Tabletop. Across those 12 shelf entries, 21 total titles play over **PLAY NEARBY**
-(including Tabletop Reversi, Tabletop Mancala, Tabletop Morris,
-Tabletop Onitama, Tabletop Liars Dice, Tabletop Dobutsu, Tabletop Backgammon,
-Tabletop Santorini, Tabletop Quoridor, and Tabletop Dominoes). Put two devices
-next to each other and they find one another. No pairing screen, no room code,
-no account, no router, no internet.
+Twelve of the games play over **PLAY NEARBY**: Chess, Checkers, Connect Four, Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt, Toy Battle, Go, Hex and Tabletop. Across those 12 shelf entries, 21 total titles play over **PLAY NEARBY** (including Tabletop Reversi, Tabletop Mancala, Tabletop Morris, Tabletop Onitama, Tabletop Liars Dice, Tabletop Dobutsu, Tabletop Backgammon, Tabletop Santorini, Tabletop Quoridor, and Tabletop Dominoes). Put two devices next to each other and they find one another. No pairing screen, no room code, no account, no router, no internet.
 
-Readers can also exchange books and artwork directly: select **Send to Nearby Device** from the book options menu in the Library or File Browser, and choose **Receive File** under File Transfer on the other reader. Compatible across Onyx BOOX Picco, Xteink X4 Pro, and CrossInk devices.
+---
 
-### Why it is shaped like this
+### Design & Architecture Notes
 
-The decisions are written down rather than remembered. Each of these is the
-short version of one of them:
+- [docs/xmarginalia-differences.md](docs/xmarginalia-differences.md) -- complete breakdown of every XMarginalia feature, hardware target, SDK change, and upstream fix.
+- [docs/companion.md](docs/companion.md) -- spoiler-free AI Companion architecture, Docker Compose / Caddy setup, and security model.
+- [plugins/audiobookshelf/README.md](plugins/audiobookshelf/README.md) -- Audiobookshelf SD plugin installation and usage.
+- [docs/identity.md](docs/identity.md) -- why a screen that holds still is the point rather than a limitation.
+- [docs/design-language.md](docs/design-language.md) -- typography and ink budget on a 1-bit panel.
+- [docs/buttons.md](docs/buttons.md) -- how the two physical side buttons are used.
+- [docs/games-at-scale.md](docs/games-at-scale.md) -- how games are built and reviewed.
+- [docs/apps/](docs/apps/) -- per-game rules, state machines, and design notes.
 
-- [docs/identity.md](docs/identity.md) -- why a screen that holds still is the
-  point rather than a limitation. The rest is downstream of it.
-- [docs/design-language.md](docs/design-language.md) -- what that means on a
-  1-bit panel, and the ink budget that governs it.
-- [docs/buttons.md](docs/buttons.md) -- how the two physical buttons are used,
-  and why there are only two.
-- [docs/games-at-scale.md](docs/games-at-scale.md) -- how a game gets built, and
-  the critic agents that tear it apart before it ships.
-- [docs/apps/](docs/apps/) -- per-game rules, state machines and the decisions
-  behind each one.
+---
 
 ## Install it
 
-> **The X4 Pro is not the X4.** CrossPlay is for the Xteink **X4 Pro** and the
-> Seeed reTerminal Sticky and M5Stack PaperMono / Lite, all ESP32-S3. The plain **X4** and the **X3** are
-> ESP32-C3, and writing an S3 image to one of those used to brick it. Install
-> [CrossPoint](https://crosspointreader.com/) on those instead: it is excellent,
-> and it is what this is built on.
->
-> **You do not have to work out which you have.** The browser installer below
-> reads the chip off the device before it writes anything, and stops with
-> "Nothing was written" if it is a C3. Between the supported S3 devices every image
-> carries its board name and both updaters refuse an image built for the other
-> board.
+> **The X4 Pro is not the X4.** XMarginalia targets ESP32-S3 readers: **Xteink X4 Pro**, **Onyx BOOX Picco**, **EEGO A4 / A4 Lite**, **Seeed reTerminal Sticky**, and **M5Stack PaperMono / Lite**. The plain **X4** and the **X3** are ESP32-C3, and writing an S3 image to one of those used to brick it—install [CrossPoint](https://crosspointreader.com/) on those instead. Between supported S3 boards, every image carries its board tag and the updaters reject mismatched hardware.
 
-Open [**crossplay.ma-r-s.com/#get**](https://crossplay.ma-r-s.com/#get) in
-Chrome or Edge on a computer, plug the device in, wake it, and press **Install**.
-The page downloads the current release and writes it over USB itself; there is
-nothing to install first and no command to type. Safari and Firefox have no Web
-Serial, and no phone or tablet does either, so the button says so rather than
-failing when pressed.
+Download release binaries and the Audiobookshelf plugin from the [XMarginalia Releases](https://github.com/glintux/XMarginalia/releases) page:
 
-You do not need to have installed CrossPoint first. Flashing replaces the
-firmware, not the SD card: your library, your reading positions and your fonts
-are left alone, and installing stock CrossPoint over the top puts the device
-back where it was.
+- **Xteink X4 Pro**:
+  - First USB install: `xmarginalia-<version>-x4pro-full.bin` at `0x0`
+  - Existing CrossPoint / CrossPlay / XMarginalia OTA or SD update: `firmware.bin`
+  ```bash
+  esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 xmarginalia-<version>-x4pro-full.bin
+  ```
+- **EEGO A4 / A4 Lite**:
+  - First USB install: `xmarginalia-<version>-eego_a4-full.bin` at `0x0`
+  - OTA or SD update: `firmware-eego_a4.bin`
+  ```bash
+  esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 xmarginalia-<version>-eego_a4-full.bin
+  ```
+- **Audiobookshelf SD Plugin**:
+  - Extract `xmarginalia-audiobookshelf-plugin.zip` (`audiobookshelf/`) to `/plugins/` or `/.crosspoint/plugins/` on your SD card and enable **Settings -> Connectivity -> Plugins**.
 
-[**docs/install.md**](docs/install.md) covers the rest: installing by hand with
-esptool, updating a device you already flashed, a **USB-locked X4 Pro** (the
-Xteink Unlocker to CrossPoint, then our `firmware.bin` from the SD card), and
-Developer Mode, which reflashes over Wi-Fi with no cable. If a flash goes wrong,
-[docs/fix-bricked-xteink.md](docs/fix-bricked-xteink.md) is the way back.
+You do not need to have installed CrossPoint first. Flashing replaces the firmware, not the SD card: your library, reading positions, and fonts are left alone, and installing stock CrossPoint over the top restores stock reading behavior.
 
-Once it is running, [USER_GUIDE.md](USER_GUIDE.md) is the guide to the device
-itself: the controls, the reader, the web server and what to do when something
-goes wrong. It is upstream's guide with this fork's hardware folded in, so it
-covers several boards at once: where it names Left or Right, that is the older
-X4, which had a front button row the X4 Pro dropped. Back here is a swipe and
-Confirm exists only on the Sticky, which
-[docs/buttons.md](docs/buttons.md) explains.
+[**docs/install.md**](docs/install.md) covers updating over Wi-Fi/SD, a **USB-locked X4 Pro** (via the Xteink Unlocker to CrossPoint, then XMarginalia's `firmware.bin` from SD), and Developer Mode (wireless flashing with no cable). If a flash goes wrong, [docs/fix-bricked-xteink.md](docs/fix-bricked-xteink.md) explains recovery. Once running, [USER_GUIDE.md](USER_GUIDE.md) covers device controls, the reader, and the local web portal.
 
 ### BOOX Picco
 
 > [!WARNING]
-> **Experimental / Use at Your Own Risk**: Support for the BOOX Picco in CrossPlay is **for experimental purposes only**. It was developed with AI assistance / generation and has received **limited production testing**. While tested and confirmed working on physical hardware, flash at your own risk and always keep a full flash backup.
+> **Experimental / Use at Your Own Risk**: Support for the BOOX Picco is **for experimental purposes only** and has received **limited production testing**. While verified on physical hardware, flash at your own risk and always keep a full flash backup (`esptool.py --chip esp32s3 read_flash 0 0x1000000 picco-stock.bin`).
 
 > [!NOTE]
-> **PSRAM Display Buffers**: Display framebuffers are allocated in external PSRAM (`FREEINK_FB_PSRAM=1`). This keeps internal DRAM free for Wi-Fi MAC DMA packet buffers during TLS downloads (Wordle, XKCD, Hacker News).
+> **PSRAM Display & TLS Buffers**: Display framebuffers (`FREEINK_FB_PSRAM=1`) and wolfSSL TLS allocations live in external PSRAM, keeping internal DRAM free for Wi-Fi DMA packet buffers during TLS requests.
 
-The **BOOX Picco** (BOOX Tiles) is an ESP32-S3 e-reader featuring a 480×800 portrait e-ink panel, capacitive touch, physical Up/Down side buttons, and a hardware toggle switch. Unlike other devices, the Picco retains its factory partition table, which includes a vendor `safeboot` recovery partition. CrossPlay completely respects that layout and installs **strictly into the single application partition at `0xE0000`**, never touching the vendor bootloader (`0x0`), NVS (`0x9000`), or `safeboot` recovery (`0x20000`).
+The **BOOX Picco** (BOOX Tiles) is an ESP32-S3 e-reader featuring a 480×800 portrait e-ink panel, capacitive touch, physical Up/Down side buttons, and a hardware toggle switch. Unlike the X4 Pro or EEGO A4, the Picco retains its vendor partition table including `safeboot` recovery. XMarginalia installs **strictly into the single application slot at `0xE0000`**—never touching the vendor bootloader (`0x0`), NVS (`0x9000`), or `safeboot` (`0x20000`). **Never flash a `-full.bin` or write to `0x0` on a BOOX Picco.**
 
-#### Installing Pre-Built Firmware
+#### Installing Pre-Built Picco Firmware
 
-1. Download **`crossplay-boox-picco-firmware.bin`** from the [Releases](https://github.com/glintux/crossplay/releases) page.
-2. Put the BOOX Picco into ROM bootloader mode:
-   - Power off the device completely.
-   - Press and hold **both the Power button and Volume Up (+)** side button simultaneously while connecting the USB-C cable (hold for ~5–8 seconds, then release).
-3. Flash the single application slot using `esptool`:
+1. Download **`firmware-picco.bin`** from the [XMarginalia Releases](https://github.com/glintux/XMarginalia/releases) page.
+2. Put the BOOX Picco into ROM bootloader mode: power off completely, then hold **both Power and Volume Up (+)** while plugging in USB-C (~5–8 seconds, then release).
+3. Flash only the application partition at `0xE0000`:
    ```bash
-   esptool --chip esp32s3 -p /dev/ttyACM0 -b 921600 write-flash 0xE0000 crossplay-boox-picco-firmware.bin
+   esptool --chip esp32s3 -p /dev/ttyACM0 -b 921600 write-flash 0xE0000 firmware-picco.bin
    ```
-   *(On Windows, replace `/dev/ttyACM0` with your COM port, e.g., `COM3`. On older esptool installations, `esptool.py` and `write_flash` syntax also work).*
 
-#### Building and Flashing from Source
-
-```bash
-# Build the release image
-pio run -e gh_release_picco
-
-# Flash safely to hardware (the custom uploader guarantees only offset 0xE0000 is written)
-pio run -e gh_release_picco -t upload
-```
-
-#### Running the Desktop Simulator
-
-You can test the full Picco experience (native 480×800 portrait layout, apps, and hardware toggle switch) on your computer without a device:
+#### Flashing from a Local Clone (No Rebuild)
 
 ```bash
-pio run -e simulator_picco -t run
+./scripts_local/flash-device.sh         # auto-detects X4 Pro, BOOX Picco, or EEGO A4 via 0x8000 partition table
+./scripts_local/flash-device.sh picco   # explicitly enforces 0xE0000 app-only write for Picco
 ```
 
 #### Controls on the BOOX Picco
 
-- **Side Buttons**: Physical Up / Down keys navigate pages in the EPUB reader and scroll lists.
+- **Side Buttons**: Up / Down turn pages and scroll lists; pressing **Up + Down** outside the reader recovers touch if disabled.
 - **Toggle Switch**: Physical switch toggles sleep mode.
-- **Touch Screen**:
-  - Tap left or right third of the screen to turn pages forward/backward.
-  - Tap top third of the screen to reveal the toolbar, library menu, frontlight sliders, and reader settings.
-  - Swipe from the left edge inwards to go **Back** to the previous screen.
-  - Tap games and apps on the Home shelf to launch them.
+- **Touch Screen**: Tap left/right third to turn pages, top third for toolbar/frontlight/settings, swipe inward from the left edge to go **Back**, or configure edge slides under Reader Settings.
 
-#### Restoring Stock / Safe Recovery
+Please report hardware or device-specific issues on [GitHub Issues](https://github.com/glintux/XMarginalia/issues).
 
-Before your first flash, it is recommended to back up your full flash:
-```bash
-esptool.py --chip esp32s3 read_flash 0 0x1000000 picco-stock.bin
-```
-Because CrossPlay never overwrites `0x20000` (`safeboot`), the hardware recovery partition is always preserved. Installing BOOX's official firmware or CrossPoint via their web flasher restores the stock state at any time.
-
-Every release is flashed to real hardware (X4 Pro, Sticky, and BOOX Picco) before it ships. BOOX Picco support remains experimental with limited production testing, so if you install it, please [say what happened](https://github.com/glintux/crossplay/issues), either way.
+---
 
 ## What it does over the network
 
-Most of the shelf never touches the network. Of the parts that do:
+Most of XMarginalia stays completely offline. Of the features that use Wi-Fi or ESP-NOW:
 
-- **Reading positions sync to CrossPoint's own server by default.** That is
-  upstream's infrastructure rather than this fork's, inherited so that flashing
-  CrossPlay over CrossPoint does not orphan an existing sync. The address is a
-  setting and can be pointed at any KOSync server.
-- **Connections, Wordle, xkcd, Hacker News, Trivia and Instapaper**
-  fetch what you ask them for, when you ask. Connections downloads the
-  published puzzle archive in one go when you press the button for it, from a
-  GitHub mirror rather than from the New York Times, and CrossPlay ships none
-  of the puzzles. Wordle does the same from another mirror, and asks the New
-  York Times itself only for the day or two that mirror has not caught up with,
-  never for a day after today; Trivia's question pack and xkcd's comics are downloaded once onto
-  the card.
-- **Opening a Hacker News article sends its URL to a third party.** The story
-  list comes from the public [Algolia API](https://hn.algolia.com/api), and
-  opening an article proxies it through [r.jina.ai](https://r.jina.ai) to get
-  readable text back, so that service learns what you read. It is a choice, not
-  an accident, which is why it is written here.
-- **AI Companion is off until you configure `/.crosspoint/companion.json`.**
-  When enabled, queries send book metadata, your reading position, and the
-  selected/anchor text to your own self-hosted `companion-bridge` server.
-  **Security note:** exposing `companion-bridge` externally to the public
-  internet is risky—prefer keeping it on your LAN or behind a private VPN, and
-  if you front it with a reverse proxy such as Caddy, enforce HTTPS and strong
-  `X-API-Key` authentication (see [docs/companion.md](docs/companion.md)).
-- **Developer Mode is off** until you turn it on. While it is on the device
-  will not deep-sleep, and the panel says so.
+- **Spoiler-Free AI Companion (`companion-bridge`)**: Off until `/.crosspoint/companion.json` (or plugin fallback config) is present. When triggered inside the reader, it sends book identifiers, your reading position, and visible-page/selected text to your own self-hosted `companion-bridge` server. Prefer running `companion-bridge` on your private LAN or behind a private VPN (WireGuard/Tailscale); if proxied externally, enforce HTTPS and a strong `X-API-Key` ([docs/companion.md](docs/companion.md)).
+- **Audiobookshelf Plugin**: Off unless enabled under **Settings -> Connectivity -> Plugins** and configured with your server URL and credentials. Connects directly to your configured Audiobookshelf server for browsing, EPUB download, and CFI progress sync.
+- **OPDS Browser**: Connects only to user-configured OPDS catalogs under **File Transfer**.
+- **Reading Position Sync (KOSync)**: Uses CrossPoint's default sync endpoint unless pointed at your own KOSync server in Settings, preserving compatibility for users upgrading from stock CrossPoint.
+- **Connections, Wordle, xkcd, Hacker News, Trivia, and Instapaper**: Fetch content only when you ask them to. Connections and Wordle fetch published puzzle archives from community GitHub mirrors (plus NYT for the latest unmirrored Wordle day or two); Trivia and xkcd download packs onto the SD card; Hacker News fetches lists from the public [Algolia API](https://hn.algolia.com/api) and proxies opened articles through [r.jina.ai](https://r.jina.ai).
+- **Developer Mode**: Off by default; while enabled, the panel indicates that deep sleep is disabled.
+
+---
 
 ## Build it
 
 ```bash
-git submodule update --init --recursive   # freeink-sdk, and nothing builds without it
-pio run -e x4pro                          # X4 Pro firmware
-pio run -e gh_release_picco               # BOOX Picco firmware
-pio run -e gh_release_eego_a4             # EEGO A4 firmware
-pio run -e simulator_x4_pro               # X4 Pro simulator (SDL2 + FreeRTOS shim)
-pio run -e simulator_picco                # BOOX Picco simulator (480x800 portrait)
+git submodule update --init --recursive   # freeink-sdk (glintux/freeink-sdk)
+pio run -e x4pro                          # X4 Pro development build
+pio run -e gh_release_picco               # BOOX Picco release image
+pio run -e gh_release_eego_a4             # EEGO A4 release image
+pio run -e simulator_x4_pro               # X4 Pro desktop simulator (SDL2 + FreeRTOS shim)
+pio run -e simulator_picco                # BOOX Picco desktop simulator (480x800 portrait)
 ./scripts_local/build-release.sh          # build x4pro, picco, eego_a4 + Audiobookshelf plugin zip
 ./scripts_local/flash-device.sh           # auto-detect connected reader & flash safely
 ./scripts_local/check.sh                  # host tests and builds
+python3 -m pytest -q server/companion-bridge/tests  # AI companion server unit tests
 ```
 
-Always name an environment. A bare `pio run` builds `[env:default]`, which is
-upstream's ESP32-C3 target: the chip the install warning above says not to
-write an S3 image to. [docs/contributing/](docs/contributing/) is the long
-version of all of this -- prerequisites, the clone, the hooks, what CI checks
-and how a branch lands.
+Always pass `-e <env>` to `pio run`: bare `pio run` targets upstream `[env:default]` (ESP32-C3). See [docs/contributing/](docs/contributing/) for toolchain setup, branches, and testing workflows, [LOCAL_SCOPE.md](LOCAL_SCOPE.md) for local ownership boundaries, [docs/shelf.md](docs/shelf.md) for the shelf contract, [docs/building-apps.md](docs/building-apps.md) for app guidelines, and [site/README.md](site/README.md) for local site assets.
 
-The apps live in `src/apps_local/`, which is what keeps the merge with upstream
-close to conflict-free. Read [LOCAL_SCOPE.md](LOCAL_SCOPE.md) for what the fork
-owns and what it turns down, [docs/shelf.md](docs/shelf.md) for the shelf
-contract, and [docs/building-apps.md](docs/building-apps.md) for how an app is
-put together. [docs/README.md](docs/README.md) indexes the rest, including
-[docs/workflow/](docs/workflow/), which is how the work itself is run.
-`site/` is the static website and the browser build;
-[site/README.md](site/README.md) says how to serve it.
+---
 
-## Credit and licence
+## Credit and upstream attribution
 
-XMarginalia is MIT, like the upstream projects it forks. This repository is a
-fork of the upstream firmwares:
-[CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader),
-**CrossInk**, and **CrossPlay**, and stands on the
-[FreeInk SDK](https://freeink.org/); CrossPoint's own README is kept at
-[docs/crosspoint-readme.md](docs/crosspoint-readme.md).
+**XMarginalia** is MIT-licensed and stands on the shoulders of the open-source e-ink firmware ecosystem. Upstream projects are credited here for attribution and reference:
 
-xkcd comics are by Randall Munroe, [CC BY-NC 2.5](https://xkcd.com/license.html),
-fetched by the device from [xkcd.com](https://xkcd.com). Connections puzzles are
-the New York Times'; CrossPlay ships none of them and fetches the archive, when
-you ask it to, from the community mirror at
-[Eyefyre/NYT-Connections-Answers](https://github.com/Eyefyre/NYT-Connections-Answers).
-Wordle's answers and its list of accepted guesses are the New York Times' too;
-CrossPlay ships none of them and fetches them, when you ask, from
-[mfilej/wrdl](https://github.com/mfilej/wrdl) and, for the newest days, from
-the Times' own daily answer.
-Trivia's questions are built from the community
-[Jeopardy! clue dataset](https://github.com/jwolle1/jeopardy_clue_dataset).
-Underhand's cards are the text of Underhand (Spoopy Squad, Cornell GDIAC, 2017),
-used with its authors' permission; none of its art or sound is.
-Type is Jersey 25 and Instrument Serif, both SIL OFL. The Calculator's
-arithmetic is IBM's [decNumber](https://speleotrove.com/decimal/decnumber.html),
-under the ICU License (ICU 1.8.1 and later), vendored at `lib/decNumber` with
-its notice; it is there so the calculator answers 0.1 + 0.2 - 0.3 with zero,
-which a binary one cannot.
+- [**CrossPoint Reader**](https://github.com/crosspoint-reader/crosspoint-reader) — Upstream foundational firmware providing the EPUB/XTC reading engine, SD plugin system, sync engine, web portal, and HAL architecture. CrossPoint's original README is preserved at [docs/crosspoint-readme.md](docs/crosspoint-readme.md).
+- **CrossInk** — Upstream fork introducing the Minimal & Dashboard UI themes, customizable status bar, Focus Reading & Phase 4 typography, Reading Statistics, Controls 2.0, and Nearby CIFT transfer.
+- [**CrossPlay**](https://github.com/ma-r-s/crossplay) ([browser simulator](https://crossplay.ma-r-s.com)) — Upstream fork providing the `src/apps_local/` 27-game / 8-app shelf, Study, Hacker News, xkcd, Instapaper, Wallpapers, Wikipedia, Calculator, Notes, Play Nearby ESP-NOW multiplayer, host-test & simulator framework, and BOOX Picco / EEGO A4 upstream hardware & `v1.15.1` reliability fixes.
+- [**FreeInk SDK**](https://freeink.org/) — Low-level ESP32 e-paper HAL/SDK underlying these firmwares (extended in XMarginalia's [`glintux/freeink-sdk`](https://github.com/glintux/freeink-sdk) fork for all-PSRAM wolfSSL/display buffers and OPDS improvements).
 
-Where a game on the shelf carries the name of a published game, that name is
-its owner's trademark and is used to say what the thing is; game mechanics are
-not copyrightable. Sea Salt & Paper was designed by Bruno Cathala and Theo
-Riviere and is published by Bombyx. Toy Battle was designed by Paolo Mori and
-Alessandro Zucchini and is published by Repos Production. CrossPlay implements
-the games; it is not affiliated with, endorsed by or sponsored by any of their
-owners.
+### Third-party content & library notices
 
-Every third-party notice in one place, including what is knowingly outstanding:
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). To report a security problem,
-[SECURITY.md](SECURITY.md).
+xkcd comics are by Randall Munroe, [CC BY-NC 2.5](https://xkcd.com/license.html), fetched by the device from [xkcd.com](https://xkcd.com). Connections puzzles are the New York Times'; XMarginalia ships none of them and fetches the archive, when you ask it to, from [Eyefyre/NYT-Connections-Answers](https://github.com/Eyefyre/NYT-Connections-Answers). Wordle answers and accepted guesses are the New York Times' too; XMarginalia ships none of them and fetches them, when asked, from [mfilej/wrdl](https://github.com/mfilej/wrdl) and, for the newest days, the Times' own daily answer. Trivia's questions are built from the community [Jeopardy! clue dataset](https://github.com/jwolle1/jeopardy_clue_dataset). Underhand's cards are the text of Underhand (Spoopy Squad, Cornell GDIAC, 2017), used with its authors' permission; none of its art or sound is included. Type is Jersey 25 and Instrument Serif, both SIL OFL. Calculator arithmetic uses IBM's [decNumber](https://speleotrove.com/decimal/decnumber.html) under the ICU License (vendored at `lib/decNumber`).
+
+Where a game on the shelf carries the name of a published game, that name is its owner's trademark and is used to describe what the game is; game mechanics are not copyrightable. Sea Salt & Paper was designed by Bruno Cathala and Theo Riviere and is published by Bombyx. Toy Battle was designed by Paolo Mori and Alessandro Zucchini and is published by Repos Production. XMarginalia (via the upstream CrossPlay shelf) implements these games; it is not affiliated with, endorsed by, or sponsored by any of their owners.
+
+See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full notices and [SECURITY.md](SECURITY.md) to report a security issue.

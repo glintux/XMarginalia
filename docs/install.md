@@ -1,4 +1,4 @@
-# Installing CrossPlay
+# Installing XMarginalia
 
 The README covers the one-click browser install, which is what almost
 everybody wants. This file is the rest: installing by hand, updating a device
@@ -20,10 +20,10 @@ You do not need to have installed CrossPoint first.
 ## By hand, over USB
 
 1. Download your device's full image from the
-   [releases page](https://github.com/ma-r-s/crossplay/releases):
-   `crossplay-<version>-x4pro-full.bin` for the X4 Pro,
-   `crossplay-<version>-sticky-full.bin` for the Sticky, or
-   `crossplay-<version>-papermono-full.bin` for PaperMono / Lite. Each is the whole
+   [XMarginalia releases page](https://github.com/glintux/XMarginalia/releases):
+   `xmarginalia-<version>-x4pro-full.bin` for the X4 Pro or
+   `xmarginalia-<version>-eego_a4-full.bin` for EEGO A4 (or historical
+   `crossplay-<version>-sticky-full.bin` / `crossplay-<version>-papermono-full.bin` builds). Each is the whole
    firmware: second-stage bootloader at `0x0`, partition table at `0x8000`,
    application at `0x10000`, in one file.
 2. Plug the device into a computer over USB.
@@ -32,11 +32,11 @@ You do not need to have installed CrossPoint first.
    for your device:
 
    ```bash
-   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-<version>-x4pro-full.bin
+   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 xmarginalia-<version>-x4pro-full.bin
    ```
 
    ```bash
-   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-<version>-sticky-full.bin
+   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 xmarginalia-<version>-eego_a4-full.bin
    ```
 
 For PaperMono / Lite, use:
@@ -68,14 +68,14 @@ Build and flash the **EEGO A4** target using PlatformIO (`gh_release_eego_a4`) o
 > [!NOTE]
 > **PSRAM Display & TLS Buffers**: Display framebuffers and wolfSSL TLS structures are allocated in external PSRAM (`FREEINK_FB_PSRAM=1` and custom `wolfSSL_SetAllocators`). This keeps internal DRAM free for Wi-Fi MAC DMA packet buffers during TLS downloads (Wordle, XKCD, Hacker News).
 
-The **BOOX Picco** preserves its vendor bootloader, partition table, and `safeboot` recovery partition. It is **never** flashed at `0x0`. Instead, flash only the single application image (`firmware.bin` or `crossplay-boox-picco-firmware.bin`) to **`0xE0000`**:
+The **BOOX Picco** preserves its vendor bootloader, partition table, and `safeboot` recovery partition. It is **never** flashed at `0x0`. Instead, flash only the single application image (`firmware-picco.bin`) to **`0xE0000`**:
 
 1. Power off the device completely.
 2. Press and hold **both Power and Volume Up (+)** simultaneously while connecting the USB-C cable (hold for ~5–8 seconds, then release) to enter the ESP32-S3 ROM bootloader.
 3. Flash the single application slot:
 
 ```bash
-esptool --chip esp32s3 -p /dev/ttyACM0 -b 921600 write-flash 0xE0000 crossplay-boox-picco-firmware.bin
+esptool --chip esp32s3 -p /dev/ttyACM0 -b 921600 write-flash 0xE0000 firmware-picco.bin
 ```
 
 Or from source with PlatformIO:
@@ -90,7 +90,7 @@ way back.
 ## Updating an install you already have
 
 The release also carries application-only images: `firmware.bin` for X4 Pro,
-`firmware-sticky.bin` for Sticky, and `firmware-papermono.bin` for PaperMono / Lite.
+`firmware-picco.bin` for BOOX Picco, and `firmware-eego_a4.bin` for EEGO A4.
 Use the file for your device. Updating needs no cable: **Settings > Check for updates** fetches it over Wi-Fi, or you can copy
 it onto the SD card and choose it from the same screen. The updater matches
 that exact filename, so do not rename it.
@@ -121,15 +121,15 @@ with USB flashing locked. The browser installer and `esptool` cannot reach
 one: the serial device picker never shows it. Units bought from xteink.com
 are not locked.
 
-The route that works, reported by a user on
-[issue #206](https://github.com/ma-r-s/crossplay/issues/206) (2026-09-23):
+The route that works, originally reported on
+[upstream issue #206](https://github.com/ma-r-s/crossplay/issues/206) (2026-09-23):
 
 1. Install stock CrossPoint with the
    [Xteink Unlocker](https://crosspointreader.com/unlocker), which delivers
    it through the device's own update mechanism over Wi-Fi. Use CrossPoint's
    stable release.
-2. Download CrossPlay's **`firmware.bin`** from the
-   [releases page](https://github.com/ma-r-s/crossplay/releases). The
+2. Download XMarginalia's **`firmware.bin`** from the
+   [XMarginalia releases page](https://github.com/glintux/XMarginalia/releases). The
    app-only file, exactly that name: not the `-full.bin`, not the `.elf`.
 3. Copy it to the root of the SD card, then on the device:
    **Settings > System > SD Card Firmware Update**, and pick it.

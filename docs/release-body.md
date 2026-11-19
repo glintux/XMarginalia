@@ -1,4 +1,4 @@
-[Which file, and by hand](https://github.com/glintux/crossplay/blob/xmarginalia/docs/install.md) · [earlier releases](https://github.com/glintux/crossplay/blob/xmarginalia/docs/release-notes.md) · [differences](https://github.com/glintux/crossplay/blob/xmarginalia/docs/xmarginalia-differences.md)
+[Which file, and by hand](https://github.com/glintux/XMarginalia/blob/xmarginalia/docs/install.md) · [earlier releases](https://github.com/glintux/XMarginalia/blob/xmarginalia/docs/release-notes.md) · [differences](https://github.com/glintux/XMarginalia/blob/xmarginalia/docs/xmarginalia-differences.md)
 
 ### What is new in 1.1.0
 
