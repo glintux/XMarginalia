@@ -13,6 +13,8 @@
 #include <freertos/task.h>
 #endif
 
+#include <HalPowerManager.h>
+
 #include "../../activities/Activity.h"
 #include "../ui/ToyboxScreen.h"
 #include "EinkBoyCore.h"
@@ -93,7 +95,7 @@ class EinkBoyActivity final : public Activity {
 
   static constexpr uint64_t EMULATION_FRAME_PERIOD_US = 16743ULL;
   static constexpr uint64_t DISPLAY_PERIOD_US = 250000ULL;
-  static constexpr uint64_t FAST_DISPLAY_PERIOD_US = 65000ULL;
+  static constexpr uint64_t FAST_DISPLAY_PERIOD_US = 35000ULL;
   static constexpr uint64_t AUTOSAVE_PERIOD_US = 60000000ULL;
   static constexpr uint64_t CLEAN_PERIOD_US = 60000000ULL;
   static constexpr uint8_t MAX_CATCH_UP_FRAMES = 4;
@@ -176,6 +178,13 @@ class EinkBoyActivity final : public Activity {
   uint64_t nextDisplayUs = 0;
   uint64_t nextAutosaveUs = 0;
   uint64_t nextCleanUs = 0;
+  uint64_t nextPerfLogUs = 0;
+  std::atomic<uint32_t> perfEmuFrames{0};
+  uint32_t perfDrawCount = 0;
+  uint32_t perfDrawUsTotal = 0;
+  uint32_t perfRefreshBase = 0;
+  uint32_t perfSkipBase = 0;
+  std::unique_ptr<HalPowerManager::Lock> cpuSpeedLock;
 
   std::jmp_buf peanutFrameJmp{};
   bool hasPeanutJmp = false;
@@ -230,6 +239,9 @@ class EinkBoyActivity final : public Activity {
   void setGameLayout();
   void addControl(TouchControl control, int x, int y, int w, int h, const char* label);
   void rotatePlayingLayout();
+  void applyRefreshPreset();
+  void resetDisplayTuning();
+  void logPerformanceIfDue(uint64_t nowUs);
 
   bool loadRom();
   bool initEmulator();

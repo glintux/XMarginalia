@@ -166,9 +166,8 @@ void buildLibrary(toybox::Screen& screen, const LibraryModel& model) {
     exitBtn.label = "EXIT";
     exitBtn.action = ActionExitApp;
     exitBtn.borderEdges = fui::EdgesNone;
-    screen.button(exitBtn,
-                  fui::makeRect(static_cast<int16_t>(footer.x + btnW + gap), footer.y, footer.width - btnW - gap,
-                                footer.height));
+    screen.button(exitBtn, fui::makeRect(static_cast<int16_t>(footer.x + btnW + gap), footer.y,
+                                         footer.width - btnW - gap, footer.height));
   }
 
   if (model.pageCount > 1) {
@@ -312,6 +311,10 @@ const char* settingRowLabel(const SettingRow row) {
       return "ORIENTATION";
     case SettingRow::RefreshMode:
       return "REFRESH MODE";
+    case SettingRow::DitherMode:
+      return "DITHER MODE";
+    case SettingRow::AutoClean:
+      return "CLEANING";
     case SettingRow::TouchControls:
       return "TOUCH CONTROLS";
     case SettingRow::ShowTitle:
@@ -334,9 +337,21 @@ void formatSettingRowValue(const SettingsModel& model, const SettingRow row, cha
     case SettingRow::Orientation:
       std::snprintf(out, outSize, "%s", model.settings.layout == 0 ? "PORTRAIT" : "LANDSCAPE");
       return;
-    case SettingRow::RefreshMode:
-      std::snprintf(out, outSize, "%s",
-                    model.settings.refresh == 0 ? (model.asyncSupported ? "ASYNC" : "AUTO") : "BLOCKING");
+    case SettingRow::RefreshMode: {
+      const char* label = "FAST";
+      if (model.settings.refresh == 1) {
+        label = "TURBO";
+      } else if (model.settings.refresh == 2) {
+        label = model.asyncSupported ? "STANDARD" : "BLOCKING";
+      }
+      std::snprintf(out, outSize, "%s", label);
+      return;
+    }
+    case SettingRow::DitherMode:
+      std::snprintf(out, outSize, "%s", model.settings.ditherMode == 0 ? "STABLE" : "SMOOTH");
+      return;
+    case SettingRow::AutoClean:
+      std::snprintf(out, outSize, "%s", model.settings.autoClean == 0 ? "ON PAUSE" : "AUTO 60S");
       return;
     case SettingRow::TouchControls:
       std::snprintf(out, outSize, "%s", model.settings.touchControls ? "ON" : "OFF");
@@ -390,7 +405,7 @@ void buildSettings(toybox::Screen& screen, const SettingsModel& model) {
   list.count = kCount;
   list.selectedIndex = static_cast<int16_t>(model.selected);
   list.action = ActionSettingRow;
-  list.rowHeight = toybox::kRowHeight;
+  list.rowHeight = 52;
   list.rowGap = screen.theme().listRowGap;
   screen.list(list);
 }

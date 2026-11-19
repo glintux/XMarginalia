@@ -94,6 +94,8 @@ struct InGameMenuModel {
 enum class SettingRow : uint8_t {
   Orientation = 0,
   RefreshMode,
+  DitherMode,
+  AutoClean,
   TouchControls,
   ShowTitle,
   ButtonUp,

@@ -10,9 +10,7 @@ namespace {
 
 constexpr int kMaxGameRowBytes = 64;
 
-char toLowerAscii(const char c) {
-  return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
-}
+char toLowerAscii(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
 
 bool endsWithIgnoreCase(const std::string_view text, const std::string_view suffix) {
   if (text.size() < suffix.size()) return false;
@@ -58,11 +56,12 @@ void gamePatterns(uint8_t (&patterns)[2][4][2], const int scale, const bool alon
 }
 
 void buildGameRow(uint8_t* out, const uint8_t* src, const int step, const int count, const int scale,
-                  const uint8_t (&patterns)[4][2]) {
+                  const uint8_t (&patterns)[4][2], const bool stableDither) {
   uint32_t acc = 0;
   int bits = 0;
   for (int g = 0; g < count; ++g) {
-    acc = (acc << scale) | patterns[src[g * step] & 0x03][(g * scale) & 1];
+    const int phase = stableDither ? 0 : ((g * scale) & 1);
+    acc = (acc << scale) | patterns[src[g * step] & 0x03][phase];
     bits += scale;
     if (bits >= 8) {
       bits -= 8;
@@ -140,12 +139,14 @@ size_t serializeSettings(const Settings& settings, uint8_t* out, const size_t ou
   out[3] = 'S';
   out[4] = 1;
   out[5] = settings.layout <= 1 ? settings.layout : 0;
-  out[6] = settings.refresh <= 1 ? settings.refresh : 0;
+  out[6] = settings.refresh <= 2 ? settings.refresh : 0;
   out[7] = settings.touchControls ? 1 : 0;
   out[8] = settings.showGameTitle ? 1 : 0;
   out[9] = static_cast<uint8_t>(settings.upAction);
   out[10] = static_cast<uint8_t>(settings.downAction);
   out[11] = static_cast<uint8_t>(settings.confirmAction);
+  out[12] = settings.ditherMode <= 1 ? settings.ditherMode : 0;
+  out[13] = settings.autoClean <= 1 ? settings.autoClean : 0;
   return kSettingsBinarySize;
 }
 
@@ -154,12 +155,14 @@ bool deserializeSettings(const uint8_t* data, const size_t size, Settings& out) 
   if (data[0] != 'E' || data[1] != 'K' || data[2] != 'B' || data[3] != 'S' || data[4] != 1) return false;
   const Settings defaults;
   out.layout = data[5] <= 1 ? data[5] : defaults.layout;
-  out.refresh = data[6] <= 1 ? data[6] : defaults.refresh;
+  out.refresh = data[6] <= 2 ? data[6] : defaults.refresh;
   out.touchControls = data[7] <= 1 ? data[7] : defaults.touchControls;
   out.showGameTitle = data[8] <= 1 ? data[8] : defaults.showGameTitle;
   out.upAction = sanitizeAction(data[9], defaults.upAction);
   out.downAction = sanitizeAction(data[10], defaults.downAction);
   out.confirmAction = sanitizeAction(data[11], defaults.confirmAction);
+  out.ditherMode = (size >= 13 && data[12] <= 1) ? data[12] : defaults.ditherMode;
+  out.autoClean = (size >= 14 && data[13] <= 1) ? data[13] : defaults.autoClean;
   return true;
 }
 
@@ -216,8 +219,8 @@ bool buildSavePaths(const std::string_view romPath, char* saveOut, const size_t 
   if (romPath.empty() || !saveOut || !tmpOut || !bakOut) return false;
   const size_t slash = romPath.find_last_of('/');
   const size_t dot = romPath.find_last_of('.');
-  const size_t stemEnd = (dot != std::string_view::npos && (slash == std::string_view::npos || dot > slash)) ? dot
-                                                                                                             : romPath.size();
+  const size_t stemEnd =
+      (dot != std::string_view::npos && (slash == std::string_view::npos || dot > slash)) ? dot : romPath.size();
   if (stemEnd + 8 >= saveSize || stemEnd + 8 >= tmpSize || stemEnd + 8 >= bakSize) return false;
 
   const int nSave = std::snprintf(saveOut, saveSize, "%.*s.sav", static_cast<int>(stemEnd), romPath.data());
@@ -258,7 +261,8 @@ GameLayout computeGameLayout(const int screenW, const int screenH, const bool po
   }
 
   const int availH = std::max(kScreenHeight, screenH - 48);
-  out.scale = std::max(1, std::min({kMaxScale, std::max(kScreenWidth, screenW) / kScreenWidth, availH / kScreenHeight}));
+  out.scale =
+      std::max(1, std::min({kMaxScale, std::max(kScreenWidth, screenW) / kScreenWidth, availH / kScreenHeight}));
   out.gameW = kScreenWidth * out.scale;
   out.gameH = kScreenHeight * out.scale;
   out.gameX = std::max(0, ((screenW - out.gameW) / 2) & ~7);
@@ -282,7 +286,8 @@ bool shadeIsBlack(const uint8_t shade, const int x, const int y) {
 }
 
 bool drawDmgLandscape(const uint8_t* source, uint8_t* framebuffer, const int gameX, const int gameY, const int gameW,
-                      const int scale, const int panelBytes, const int panelW, const int panelH) {
+                      const int scale, const int panelBytes, const int panelW, const int panelH,
+                      const bool stableDither) {
   const int gameH = kScreenHeight * scale;
   const int rowBytes = gameW / 8;
   if (!source || !framebuffer || scale < 1 || scale > kMaxScale || panelBytes <= 0 || panelW <= 0 || panelH <= 0 ||
@@ -296,19 +301,21 @@ bool drawDmgLandscape(const uint8_t* source, uint8_t* framebuffer, const int gam
   for (int gy = 0; gy < kScreenHeight; ++gy) {
     const uint8_t* line = source + gy * kScreenWidth;
     for (int parity = 0; parity < 2; ++parity) {
-      buildGameRow(rows[parity], line, 1, kScreenWidth, scale, patterns[parity]);
+      buildGameRow(rows[parity], line, 1, kScreenWidth, scale, patterns[parity], stableDither);
     }
     for (int sy = 0; sy < scale; ++sy) {
       const int panelY = gy * scale + sy;
+      const int rowParity = stableDither ? (sy & 1) : (panelY & 1);
       uint8_t* out = framebuffer + static_cast<size_t>(gameY + panelY) * static_cast<size_t>(panelBytes) + (gameX >> 3);
-      std::memcpy(out, rows[panelY & 1], static_cast<size_t>(rowBytes));
+      std::memcpy(out, rows[rowParity], static_cast<size_t>(rowBytes));
     }
   }
   return true;
 }
 
 bool drawDmgPortrait(const uint8_t* source, uint8_t* framebuffer, const int gameX, const int gameY, const int gameW,
-                     const int gameH, const int scale, const int panelBytes, const int panelW, const int panelH) {
+                     const int gameH, const int scale, const int panelBytes, const int panelW, const int panelH,
+                     const bool stableDither) {
   const int rowBytes = gameH / 8;
   if (!source || !framebuffer || scale < 1 || scale > kMaxScale || panelBytes <= 0 || panelW <= 0 || panelH <= 0 ||
       gameX < 0 || gameY < 0 || (gameY & 7) != 0 || (gameH & 7) != 0 || gameX + gameW > panelH ||
@@ -320,13 +327,14 @@ bool drawDmgPortrait(const uint8_t* source, uint8_t* framebuffer, const int game
   uint8_t rows[2][kMaxGameRowBytes];
   for (int gx = 0; gx < kScreenWidth; ++gx) {
     for (int parity = 0; parity < 2; ++parity) {
-      buildGameRow(rows[parity], source + gx, kScreenWidth, kScreenHeight, scale, patterns[parity]);
+      buildGameRow(rows[parity], source + gx, kScreenWidth, kScreenHeight, scale, patterns[parity], stableDither);
     }
     for (int sx = 0; sx < scale; ++sx) {
       const int dstX = gx * scale + sx;
+      const int colParity = stableDither ? (sx & 1) : (dstX & 1);
       uint8_t* out = framebuffer + static_cast<size_t>(panelH - 1 - (gameX + dstX)) * static_cast<size_t>(panelBytes) +
                      (gameY >> 3);
-      std::memcpy(out, rows[dstX & 1], static_cast<size_t>(rowBytes));
+      std::memcpy(out, rows[colParity], static_cast<size_t>(rowBytes));
     }
   }
   return true;

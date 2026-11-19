@@ -165,12 +165,14 @@ void testSettingsAndButtons() {
 
   Settings s;
   s.layout = 1;
-  s.refresh = 1;
+  s.refresh = 2;
   s.touchControls = 0;
   s.showGameTitle = 0;
   s.upAction = ButtonAction::GbStart;
   s.downAction = ButtonAction::Rotate;
   s.confirmAction = ButtonAction::GbB;
+  s.ditherMode = 1;
+  s.autoClean = 1;
 
   uint8_t buf[kSettingsBinarySize] = {};
   CHECK(serializeSettings(s, buf, sizeof(buf)) == kSettingsBinarySize);
@@ -178,12 +180,14 @@ void testSettingsAndButtons() {
   Settings decoded;
   CHECK(deserializeSettings(buf, sizeof(buf), decoded));
   CHECK(decoded.layout == 1);
-  CHECK(decoded.refresh == 1);
+  CHECK(decoded.refresh == 2);
   CHECK(decoded.touchControls == 0);
   CHECK(decoded.showGameTitle == 0);
   CHECK(decoded.upAction == ButtonAction::GbStart);
   CHECK(decoded.downAction == ButtonAction::Rotate);
   CHECK(decoded.confirmAction == ButtonAction::GbB);
+  CHECK(decoded.ditherMode == 1);
+  CHECK(decoded.autoClean == 1);
 
   // Out-of-range button action falls back cleanly without UB.
   buf[9] = 250;
@@ -233,6 +237,37 @@ void testLayoutAndDither() {
   std::fill(panel.begin(), panel.end(), 0xFF);
   CHECK(cgbdither::cgbDitherFrame(lumBlack.data(), panel.data(), port.gameX, port.gameY, port.scale, 100, 480, true));
   CHECK(panel[static_cast<size_t>(480 - 1 - port.gameX) * 100 + (port.gameY >> 3)] == 0x00);
+
+  // Scroll-stable DMG dithering: shifting a sprite by 1 game pixel across a grey
+  // background leaves the background bytes outside the sprite bit-identical.
+  std::vector<uint8_t> dmgA(kFrameBytes, 1);  // uniform light grey background
+  std::vector<uint8_t> dmgB(kFrameBytes, 1);
+  dmgA[10 * kScreenWidth + 10] = 3;
+  dmgB[10 * kScreenWidth + 11] = 3;
+  std::vector<uint8_t> panelA(100 * 480, 0xFF);
+  std::vector<uint8_t> panelB(100 * 480, 0xFF);
+  CHECK(drawDmgLandscape(dmgA.data(), panelA.data(), land.gameX, land.gameY, land.gameW, land.scale, 100, 800, 480,
+                         /*stableDither=*/true));
+  CHECK(drawDmgLandscape(dmgB.data(), panelB.data(), land.gameX, land.gameY, land.gameW, land.scale, 100, 800, 480,
+                         /*stableDither=*/true));
+  // Far right of the same row is completely unaffected.
+  const size_t checkRowOffset = static_cast<size_t>(land.gameY + 10 * land.scale) * 100 + (land.gameX >> 3) + 30;
+  CHECK(std::memcmp(&panelA[checkRowOffset], &panelB[checkRowOffset], 20) == 0);
+
+  // Scroll-stable Ordered Bayer CGB dithering: changing one pixel on a grey
+  // background stays strictly local (no error-diffusion wake across the row).
+  std::vector<uint8_t> cgbA(kFrameBytes, 128);
+  std::vector<uint8_t> cgbB(kFrameBytes, 128);
+  cgbA[20 * kScreenWidth + 8] = 0;
+  cgbB[20 * kScreenWidth + 9] = 0;
+  std::fill(panelA.begin(), panelA.end(), 0xFF);
+  std::fill(panelB.begin(), panelB.end(), 0xFF);
+  CHECK(cgbdither::cgbDitherFrame(cgbA.data(), panelA.data(), land.gameX, land.gameY, land.scale, 100, 480, false,
+                                  /*orderedDither=*/true));
+  CHECK(cgbdither::cgbDitherFrame(cgbB.data(), panelB.data(), land.gameX, land.gameY, land.scale, 100, 480, false,
+                                  /*orderedDither=*/true));
+  const size_t cgbTailOffset = static_cast<size_t>(land.gameY + 20 * land.scale) * 100 + (land.gameX >> 3) + 20;
+  CHECK(std::memcmp(&panelA[cgbTailOffset], &panelB[cgbTailOffset], 30) == 0);
 }
 
 void testEmulatorSmoke() {

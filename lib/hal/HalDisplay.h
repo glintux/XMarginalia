@@ -65,6 +65,18 @@ class HalDisplay {
   void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
   // Block until a pending deferred refresh completes (no-op when none is).
   void waitRefreshComplete();
+  // Game-mode overlapped refresh: drains any previous refresh, snapshots the
+  // framebuffer baseline inside the driver, uploads the new plane, and fires
+  // the waveform without blocking so the caller can immediately render the next
+  // frame into getFrameBuffer().
+  void displayBufferOverlapped(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  void finishOverlapped();
+  // Game-mode Fast refresh tuning (0 = stock defaults).
+  void setFastRefreshTuning(uint8_t tsset, uint8_t pll);
+  void setFastRefreshDuScale(uint8_t percent);
+  void setFastRefreshDiffWindow(bool on);
+  void setDisplaySpiHz(uint32_t hz);
+  bool lastRefreshTimings(uint32_t out[8]) const;
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;

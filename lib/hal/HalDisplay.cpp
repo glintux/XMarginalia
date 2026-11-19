@@ -77,6 +77,25 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
 
 void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
 
+void HalDisplay::displayBufferOverlapped(HalDisplay::RefreshMode mode) {
+  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+    einkDisplay.requestResync(1);
+  }
+  einkDisplay.triggerDisplay(convertRefreshMode(mode));
+}
+
+void HalDisplay::finishOverlapped() { einkDisplay.completeDisplay(); }
+
+void HalDisplay::setFastRefreshTuning(uint8_t tsset, uint8_t pll) { einkDisplay.setFastRefreshTuning(tsset, pll); }
+
+void HalDisplay::setFastRefreshDuScale(uint8_t percent) { einkDisplay.setFastRefreshDuScale(percent); }
+
+void HalDisplay::setFastRefreshDiffWindow(bool on) { einkDisplay.setFastRefreshDiffWindow(on); }
+
+void HalDisplay::setDisplaySpiHz(uint32_t hz) { einkDisplay.setDisplaySpiHz(hz); }
+
+bool HalDisplay::lastRefreshTimings(uint32_t out[8]) const { return einkDisplay.lastRefreshTimings(out); }
+
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
 HalDisplay::GrayscaleCapabilities HalDisplay::grayscaleCapabilities(GrayscaleMode mode) const {

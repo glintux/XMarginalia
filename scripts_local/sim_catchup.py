@@ -691,6 +691,21 @@ def main(env):
         marker="controllerIdle",
     )
     patch(
+        src / "HalDisplay.h",
+        "  const char* controllerName() const;",
+        "  const char* controllerName() const;\n"
+        "  void setFastRefreshTuning(uint8_t, uint8_t) {}\n"
+        "  void setFastRefreshDuScale(uint8_t) {}\n"
+        "  void setFastRefreshDiffWindow(bool) {}\n"
+        "  void setDisplaySpiHz(uint32_t) {}\n"
+        "  template <typename M> void displayBufferOverlapped(M mode) { displayBuffer(mode); }\n"
+        "  void displayBufferOverlapped() { displayBuffer(); }\n"
+        "  void finishOverlapped() {}\n"
+        "  bool lastRefreshTimings(uint32_t[8]) const { return false; }",
+        "HalDisplay game-mode fast refresh stubs (host simulator)",
+        marker="displayBufferOverlapped",
+    )
+    patch(
         src / "SecureHttpClient.h",
         "  std::string getHeader(const std::string& name) const { return http_.getHeader(name); }",
         "  std::string getHeader(const std::string& name) const { return http_.getHeader(name); }\n"

@@ -42,13 +42,19 @@ enum class ButtonAction : uint8_t {
 struct Settings {
   // layout: 0 portrait, 1 landscape.
   uint8_t layout = 0;
-  // refresh: 0 fast/async when supported, 1 blocking safe refresh.
+  // refresh: 0 FAST (40% DU + PLL 0x0F + 20 MHz SPI + diff window),
+  //          1 TURBO (25% DU + PLL 0x0F + 20 MHz SPI + diff window),
+  //          2 STANDARD (stock OTP DU waveform, 10 MHz SPI).
   uint8_t refresh = 0;
   uint8_t touchControls = 1;
   uint8_t showGameTitle = 1;
   ButtonAction upAction = ButtonAction::GbA;
   ButtonAction downAction = ButtonAction::GbB;
   ButtonAction confirmAction = ButtonAction::GbStart;
+  // ditherMode: 0 STABLE (scroll-invariant block/Bayer dither), 1 SMOOTH (panel-parity / Floyd-Steinberg).
+  uint8_t ditherMode = 0;
+  // autoClean: 0 ON PAUSE (clean on pause/resume/rotate only), 1 AUTO 60S (periodic 60s mid-gameplay clean).
+  uint8_t autoClean = 0;
 };
 
 constexpr size_t kSettingsBinarySize = 16;
@@ -89,8 +95,8 @@ GameLayout computeGameLayout(int screenW, int screenH, bool portrait);
 // DMG 4-shade dithering helpers (0 = white .. 3 = black).
 bool shadeIsBlack(uint8_t shade, int x, int y);
 bool drawDmgLandscape(const uint8_t* source, uint8_t* framebuffer, int gameX, int gameY, int gameW, int scale,
-                      int panelBytes, int panelW, int panelH);
-bool drawDmgPortrait(const uint8_t* source, uint8_t* framebuffer, int gameX, int gameY, int gameW, int gameH,
-                     int scale, int panelBytes, int panelW, int panelH);
+                      int panelBytes, int panelW, int panelH, bool stableDither = false);
+bool drawDmgPortrait(const uint8_t* source, uint8_t* framebuffer, int gameX, int gameY, int gameW, int gameH, int scale,
+                     int panelBytes, int panelW, int panelH, bool stableDither = false);
 
 }  // namespace einkboy

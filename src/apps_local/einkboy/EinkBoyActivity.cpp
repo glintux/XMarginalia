@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -13,12 +14,13 @@
 #include <esp_timer.h>
 #endif
 
+#include <strings.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <strings.h>
 
 #include "../../MappedInputManager.h"
 #include "../Shelf.h"
@@ -94,6 +96,7 @@ EinkBoyActivity::EinkBoyActivity(GfxRenderer& rendererIn, MappedInputManager& ma
 EinkBoyActivity::~EinkBoyActivity() {
 #if defined(BOARD_HAS_PSRAM) || defined(SIMULATOR)
   stopEmuTask();
+  resetDisplayTuning();
   cleanup();
 #endif
 }
@@ -132,9 +135,8 @@ void EinkBoyActivity::onEnter() {
   loadSettingsProfile(false);
   loadLibraryState();
   scanDirectory("/", 0);
-  std::sort(games.begin(), games.end(), [](const GameEntry& a, const GameEntry& b) {
-    return strcasecmp(a.title.c_str(), b.title.c_str()) < 0;
-  });
+  std::sort(games.begin(), games.end(),
+            [](const GameEntry& a, const GameEntry& b) { return strcasecmp(a.title.c_str(), b.title.c_str()) < 0; });
   rebuildVisibleGames();
   view = View::Library;
   requestUpdate();
@@ -207,10 +209,6 @@ void EinkBoyActivity::loop() {
 }
 
 void EinkBoyActivity::render(RenderLock&&) {
-  if (renderer.supportsAsyncRefresh()) {
-    renderer.waitRefreshComplete();
-  }
-
 #if defined(BOARD_HAS_PSRAM) || defined(SIMULATOR)
   if (view == View::Playing) {
     if (!displayDue.exchange(false, std::memory_order_acq_rel)) return;
@@ -223,23 +221,41 @@ void EinkBoyActivity::render(RenderLock&&) {
                             (settings.touchControls ? 0x20000u : 0u) | (settings.showGameTitle ? 0x40000u : 0u) |
                             (static_cast<uint32_t>(batteryPercent & 0x7FU) << 20);
     const bool redrawChrome = cleaning || chrome != chromeKey;
+    const bool overlapped = !cleaning && settings.refresh <= 1;
+    if (!overlapped || redrawChrome) {
+      display.finishOverlapped();
+      if (renderer.supportsAsyncRefresh()) {
+        renderer.waitRefreshComplete();
+      }
+    }
     if (redrawChrome) renderer.clearScreen(0xFF);
+    const uint64_t tDraw0 = nowMicros();
     drawGameFrame();
+    perfDrawUsTotal += static_cast<uint32_t>(nowMicros() - tDraw0);
+    ++perfDrawCount;
     releaseRenderedFrame();
     if (redrawChrome) {
       drawGameControls();
       chromeKey = chrome;
     }
 
-    const bool async = !cleaning && settings.refresh == 0 && renderer.supportsAsyncRefresh();
-    if (async) {
+    if (cleaning) {
+      display.finishOverlapped();
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    } else if (overlapped) {
+      display.displayBufferOverlapped(HalDisplay::FAST_REFRESH);
+    } else if (renderer.supportsAsyncRefresh()) {
       renderer.displayBufferAsync(HalDisplay::FAST_REFRESH);
     } else {
-      renderer.displayBuffer(cleaning ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     }
     return;
   }
+  display.finishOverlapped();
 #endif
+  if (renderer.supportsAsyncRefresh()) {
+    renderer.waitRefreshComplete();
+  }
 
   renderer.setOrientation(GfxRenderer::Portrait);
   renderer.clearScreen(0xFF);
@@ -561,7 +577,13 @@ void EinkBoyActivity::handleSettingToggle(const einkboyui::SettingRow row) {
 #endif
       break;
     case einkboyui::SettingRow::RefreshMode:
-      settings.refresh = settings.refresh == 0 ? 1 : 0;
+      settings.refresh = static_cast<uint8_t>((settings.refresh + 1U) % 3U);
+      break;
+    case einkboyui::SettingRow::DitherMode:
+      settings.ditherMode = settings.ditherMode == 0 ? 1 : 0;
+      break;
+    case einkboyui::SettingRow::AutoClean:
+      settings.autoClean = settings.autoClean == 0 ? 1 : 0;
       break;
     case einkboyui::SettingRow::TouchControls:
       settings.touchControls = settings.touchControls ? 0 : 1;
@@ -730,8 +752,8 @@ void EinkBoyActivity::scanDirectory(const std::string& path, const unsigned dept
           }
         } else if (einkboy::hasSupportedRomExtension(name)) {
           const std::string fullPath = path == "/" ? path + name : path + "/" + name;
-          const bool duplicate = std::any_of(games.begin(), games.end(),
-                                             [&fullPath](const GameEntry& g) { return g.path == fullPath; });
+          const bool duplicate =
+              std::any_of(games.begin(), games.end(), [&fullPath](const GameEntry& g) { return g.path == fullPath; });
           if (!duplicate) {
             char titleBuf[64] = {};
             einkboy::formatTitleFromPath(fullPath, titleBuf, sizeof(titleBuf));
@@ -836,7 +858,7 @@ bool EinkBoyActivity::launchRom(const size_t gameIdx) {
 
   time_t rawTime = 0;
   std::time(&rawTime);
-  struct tm timeInfo {};
+  struct tm timeInfo{};
 #ifdef _WIN32
   localtime_s(&timeInfo, &rawTime);
 #else
@@ -874,10 +896,15 @@ bool EinkBoyActivity::launchRom(const size_t gameIdx) {
   nextDisplayUs = nowUs;
   nextAutosaveUs = nowUs + AUTOSAVE_PERIOD_US;
   nextCleanUs = nowUs + CLEAN_PERIOD_US;
+  nextPerfLogUs = nowUs + 2000000ULL;
+  perfEmuFrames.store(0, std::memory_order_relaxed);
+  perfDrawCount = 0;
+  perfDrawUsTotal = 0;
   displayDue.store(true, std::memory_order_release);
   fullRefreshDue.store(true, std::memory_order_release);
 
   applyJoypad();
+  applyRefreshPreset();
   view = View::Playing;
   startEmuTask();
   requestUpdate(true);
@@ -888,6 +915,7 @@ bool EinkBoyActivity::launchRom(const size_t gameIdx) {
 void EinkBoyActivity::pauseToMenu() {
 #if defined(BOARD_HAS_PSRAM) || defined(SIMULATOR)
   stopEmuTask();
+  resetDisplayTuning();
   (void)saveCartRam();
   physicalJoypadMask = 0;
   touchJoypadMask = 0;
@@ -918,8 +946,14 @@ void EinkBoyActivity::resumeFromPause() {
   const uint64_t nowUs = nowMicros();
   nextFrameUs = nowUs;
   nextDisplayUs = nowUs;
+  nextCleanUs = nowUs + CLEAN_PERIOD_US;
+  nextPerfLogUs = nowUs + 2000000ULL;
+  perfEmuFrames.store(0, std::memory_order_relaxed);
+  perfDrawCount = 0;
+  perfDrawUsTotal = 0;
   displayDue.store(true, std::memory_order_release);
   fullRefreshDue.store(true, std::memory_order_release);
+  applyRefreshPreset();
   view = View::Playing;
   startEmuTask();
   requestUpdate(true);
@@ -929,6 +963,7 @@ void EinkBoyActivity::resumeFromPause() {
 void EinkBoyActivity::stopAndUnloadGame() {
 #if defined(BOARD_HAS_PSRAM) || defined(SIMULATOR)
   stopEmuTask();
+  resetDisplayTuning();
   if (romInitialized.load(std::memory_order_acquire)) {
     (void)saveCartRam();
   }
@@ -988,7 +1023,9 @@ void EinkBoyActivity::emuTaskLoop() {
     runEmulation(nowUs);
     if (nowUs >= nextCleanUs) {
       nextCleanUs = nowUs + CLEAN_PERIOD_US;
-      fullRefreshDue.store(true, std::memory_order_release);
+      if (settings.autoClean != 0) {
+        fullRefreshDue.store(true, std::memory_order_release);
+      }
     }
     if (nowUs >= nextAutosaveUs) {
       nextAutosaveUs = nowUs + AUTOSAVE_PERIOD_US;
@@ -1031,7 +1068,9 @@ void EinkBoyActivity::routePlaying() {
   runEmulation(nowUs);
   if (nowUs >= nextCleanUs) {
     nextCleanUs = nowUs + CLEAN_PERIOD_US;
-    fullRefreshDue.store(true, std::memory_order_release);
+    if (settings.autoClean != 0) {
+      fullRefreshDue.store(true, std::memory_order_release);
+    }
   }
   if (nowUs >= nextAutosaveUs) {
     nextAutosaveUs = nowUs + AUTOSAVE_PERIOD_US;
@@ -1039,12 +1078,14 @@ void EinkBoyActivity::routePlaying() {
   }
 #endif
 
-  if (nowUs >= nextDisplayUs) {
+  if (nowUs >= nextDisplayUs && readyFrame.load(std::memory_order_acquire) <= 1) {
     displayDue.store(true, std::memory_order_release);
-    const bool asyncMode = (settings.refresh == 0) && renderer.supportsAsyncRefresh();
-    nextDisplayUs = nowUs + (asyncMode ? FAST_DISPLAY_PERIOD_US : DISPLAY_PERIOD_US);
+    const bool fastPreset = settings.refresh <= 1;
+    nextDisplayUs = nowUs + (fastPreset ? FAST_DISPLAY_PERIOD_US : DISPLAY_PERIOD_US);
     requestUpdate();
   }
+
+  logPerformanceIfDue(nowUs);
 
 #if defined(ARDUINO_ARCH_ESP32)
   delay(2);
@@ -1284,6 +1325,7 @@ void EinkBoyActivity::rotatePlayingLayout() {
   applyJoypad();
   {
     RenderLock lock(*this);
+    display.finishOverlapped();
     if (renderer.supportsAsyncRefresh()) renderer.waitRefreshComplete();
     portrait = !portrait;
     renderer.setOrientation(portrait ? GfxRenderer::Portrait : GfxRenderer::LandscapeCounterClockwise);
@@ -1295,6 +1337,85 @@ void EinkBoyActivity::rotatePlayingLayout() {
   fullRefreshDue.store(true, std::memory_order_release);
   displayDue.store(true, std::memory_order_release);
   requestUpdate(true);
+}
+
+void EinkBoyActivity::applyRefreshPreset() {
+  if (!cpuSpeedLock) {
+    cpuSpeedLock = makeUniqueNoThrow<HalPowerManager::Lock>();
+  }
+  display.finishOverlapped();
+  if (renderer.supportsAsyncRefresh()) {
+    renderer.waitRefreshComplete();
+  }
+  if (settings.refresh == 0) {
+    // FAST: 40% scaled DU LUT, PLL 0x0F, 20 MHz SPI, partial diff window.
+    display.setFastRefreshTuning(0, 0x0F);
+    display.setFastRefreshDuScale(40);
+    display.setFastRefreshDiffWindow(true);
+    display.setDisplaySpiHz(20000000);
+  } else if (settings.refresh == 1) {
+    // TURBO: 25% scaled DU LUT, PLL 0x0F, 20 MHz SPI, partial diff window.
+    display.setFastRefreshTuning(0, 0x0F);
+    display.setFastRefreshDuScale(25);
+    display.setFastRefreshDiffWindow(true);
+    display.setDisplaySpiHz(20000000);
+  } else {
+    // STANDARD: stock OTP DU waveform, default SPI clock.
+    display.setFastRefreshTuning(0, 0);
+    display.setFastRefreshDuScale(0);
+    display.setFastRefreshDiffWindow(false);
+    display.setDisplaySpiHz(0);
+  }
+  uint32_t timings[8] = {};
+  if (display.lastRefreshTimings(timings)) {
+    perfRefreshBase = timings[6];
+    perfSkipBase = timings[7];
+  } else {
+    perfRefreshBase = 0;
+    perfSkipBase = 0;
+  }
+}
+
+void EinkBoyActivity::resetDisplayTuning() {
+  display.finishOverlapped();
+  if (renderer.supportsAsyncRefresh()) {
+    renderer.waitRefreshComplete();
+  }
+  display.setFastRefreshTuning(0, 0);
+  display.setFastRefreshDuScale(0);
+  display.setFastRefreshDiffWindow(false);
+  display.setDisplaySpiHz(0);
+  cpuSpeedLock.reset();
+}
+
+void EinkBoyActivity::logPerformanceIfDue(const uint64_t nowUs) {
+  if (nextPerfLogUs == 0 || nowUs < nextPerfLogUs) return;
+  nextPerfLogUs = nowUs + 2000000ULL;
+
+  const uint32_t emuCount = perfEmuFrames.exchange(0, std::memory_order_relaxed);
+  const uint32_t drawCount = perfDrawCount;
+  const uint32_t drawAvgUs = drawCount > 0 ? (perfDrawUsTotal / drawCount) : 0;
+  perfDrawCount = 0;
+  perfDrawUsTotal = 0;
+
+  uint32_t timings[8] = {};
+  if (display.lastRefreshTimings(timings)) {
+    const uint32_t refreshes = timings[6] - perfRefreshBase;
+    const uint32_t skipped = timings[7] - perfSkipBase;
+    perfRefreshBase = timings[6];
+    perfSkipBase = timings[7];
+    LOG_INF(
+        TAG,
+        "perf2s emu=%u ref=%u skip=%u drawAvg=%uus copy=%uus new=%uus setup=%uus wave=%uus old=%uus bytes=%u mode=%u",
+        static_cast<unsigned>(emuCount), static_cast<unsigned>(refreshes), static_cast<unsigned>(skipped),
+        static_cast<unsigned>(drawAvgUs), static_cast<unsigned>(timings[0]), static_cast<unsigned>(timings[1]),
+        static_cast<unsigned>(timings[2]), static_cast<unsigned>(timings[3]), static_cast<unsigned>(timings[4]),
+        static_cast<unsigned>(timings[5]), static_cast<unsigned>(settings.refresh));
+  } else {
+    LOG_INF(TAG, "perf2s emu=%u draws=%u drawAvg=%uus mode=%u", static_cast<unsigned>(emuCount),
+            static_cast<unsigned>(drawCount), static_cast<unsigned>(drawAvgUs),
+            static_cast<unsigned>(settings.refresh));
+  }
 }
 
 bool EinkBoyActivity::loadRom() {
@@ -1379,9 +1500,8 @@ bool EinkBoyActivity::initEmulator() {
       openNotice("OUT OF MEMORY", "Could not allocate Peanut-GB state.", View::Library);
       return false;
     }
-    const enum gb_init_error_e initResult =
-        gb_init(gb, &EinkBoyActivity::romRead, &EinkBoyActivity::cartRamRead, &EinkBoyActivity::cartRamWrite,
-                &EinkBoyActivity::fatalError, this);
+    const enum gb_init_error_e initResult = gb_init(gb, &EinkBoyActivity::romRead, &EinkBoyActivity::cartRamRead,
+                                                    &EinkBoyActivity::cartRamWrite, &EinkBoyActivity::fatalError, this);
     if (initResult != GB_INIT_NO_ERROR) {
       openNotice("INIT FAILED", initErrorString(static_cast<int>(initResult)), View::Library);
       return false;
@@ -1547,6 +1667,7 @@ void EinkBoyActivity::runEmulation(const uint64_t nowUs) {
     }
 
     if (draw) publishCompletedFrame();
+    perfEmuFrames.fetch_add(1, std::memory_order_relaxed);
     nextFrameUs += EMULATION_FRAME_PERIOD_US;
     ++ran;
   }
@@ -1603,15 +1724,16 @@ void EinkBoyActivity::drawGameFrame() {
   const int panelH = renderer.getDisplayHeight();
 
   bool drawn = false;
+  const bool stableDither = (settings.ditherMode == 0);
   if (useWalnutCgb) {
     drawn = cgbdither::cgbDitherFrame(source, framebuffer, gameLayout.gameX, gameLayout.gameY, gameLayout.scale,
-                                      panelBytes, panelH, portrait);
+                                      panelBytes, panelH, portrait, stableDither);
   } else if (portrait) {
     drawn = einkboy::drawDmgPortrait(source, framebuffer, gameLayout.gameX, gameLayout.gameY, gameLayout.gameW,
-                                     gameLayout.gameH, gameLayout.scale, panelBytes, panelW, panelH);
+                                     gameLayout.gameH, gameLayout.scale, panelBytes, panelW, panelH, stableDither);
   } else {
     drawn = einkboy::drawDmgLandscape(source, framebuffer, gameLayout.gameX, gameLayout.gameY, gameLayout.gameW,
-                                      gameLayout.scale, panelBytes, panelW, panelH);
+                                      gameLayout.scale, panelBytes, panelW, panelH, stableDither);
   }
 
   if (!drawn) renderFrame.store(0xFF, std::memory_order_release);
