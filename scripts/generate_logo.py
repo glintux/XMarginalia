@@ -39,15 +39,32 @@ INSET = 5  # 2.6 units of centreline, minus half the stroke
 ARM = 39  # 10.4 units: the 7.8 run plus a half stroke at BOTH ends --
           # the outer edge and the square linecap. Getting this wrong by one
           # half-stroke makes the device brackets stubbier than the site's.
-BLOCK = 58  # 15.2 units
-BLOCK_RADIUS = 6  # 1.6 units
+PAGE_X0 = 28
+PAGE_X1 = 71  # exclusive
+PAGE_Y0 = 28
+PAGE_Y1 = 92  # exclusive
+PAGE_RADIUS = 6
 
-BLOCK_X0 = (SIZE - BLOCK) // 2
-BLOCK_X1 = BLOCK_X0 + BLOCK  # exclusive
+PAGE_CUTOUTS = (
+    (37, 41, 62, 49),
+    (37, 56, 62, 64),
+    (37, 71, 56, 79),
+)
+
+NOTE_X_CX = 90.5
+NOTE_X_CY = 44.5
+NOTE_X_HALF_ALONG = 10.076
+NOTE_X_HALF_STROKE = 4.3125
+INV_SQRT2 = 0.7071067811865476
+
+NOTE_BARS = (
+    (83, 64, 99, 72),
+    (83, 79, 94, 87),
+)
 
 
 def rects():
-    """The mark as a list of (x0, y0, x1, y1) half-open rectangles."""
+    """The axis-aligned brackets and margin bars as half-open rectangles."""
     out = []
     near = INSET
     far = SIZE - INSET - STROKE  # left edge of the right-hand stroke
@@ -60,6 +77,7 @@ def rects():
             out.append((x_arm, y_corner, x_arm + ARM, y_corner + STROKE))
             # vertical arm
             out.append((x_corner, y_arm, x_corner + STROKE, y_arm + ARM))
+    out.extend(NOTE_BARS)
     return out
 
 
@@ -68,16 +86,26 @@ def is_ink(x, y):
     for x0, y0, x1, y1 in rects():
         if x0 <= x < x1 and y0 <= y < y1:
             return True
-    # The centre block, with rounded corners.
-    if BLOCK_X0 <= x < BLOCK_X1 and BLOCK_X0 <= y < BLOCK_X1:
-        r = BLOCK_RADIUS
-        # Distance into the block from whichever corner is nearest.
-        dx = min(x - BLOCK_X0, BLOCK_X1 - 1 - x)
-        dy = min(y - BLOCK_X0, BLOCK_X1 - 1 - y)
+    # The left reading page block with rounded corners and text cutouts.
+    if PAGE_X0 <= x < PAGE_X1 and PAGE_Y0 <= y < PAGE_Y1:
+        for cx0, cy0, cx1, cy1 in PAGE_CUTOUTS:
+            if cx0 <= x < cx1 and cy0 <= y < cy1:
+                return False
+        r = PAGE_RADIUS
+        dx = min(x - PAGE_X0, PAGE_X1 - 1 - x)
+        dy = min(y - PAGE_Y0, PAGE_Y1 - 1 - y)
         if dx < r and dy < r:
-            # Sample the pixel's centre against the corner arc.
             ox, oy = (r - 0.5) - dx, (r - 0.5) - dy
             return ox * ox + oy * oy <= r * r
+        return True
+    # The right-margin X callout mark (square-capped 45-degree strokes).
+    dx = (x + 0.5) - NOTE_X_CX
+    dy = (y + 0.5) - NOTE_X_CY
+    along = abs(dx + dy) * INV_SQRT2
+    perp = abs(dx - dy) * INV_SQRT2
+    if (along <= NOTE_X_HALF_ALONG + NOTE_X_HALF_STROKE and perp <= NOTE_X_HALF_STROKE) or (
+        perp <= NOTE_X_HALF_ALONG + NOTE_X_HALF_STROKE and along <= NOTE_X_HALF_STROKE
+    ):
         return True
     return False
 
@@ -137,9 +165,13 @@ def svg():
     remember that site/assets/logo.svg and site/assets/favicon.svg carry the
     same shape off the device -- change one and change the others.
   -->
-  <rect x="{BLOCK_X0}" y="{BLOCK_X0}" width="{BLOCK}" height="{BLOCK}" rx="{BLOCK_RADIUS}" fill="currentColor" />
   <g fill="none" stroke="currentColor" stroke-width="{STROKE}" stroke-linecap="square">
 {body}
+  </g>
+  <path fill-rule="evenodd" fill="currentColor" d="M34 28H65A6 6 0 0 1 71 34V86A6 6 0 0 1 65 92H34A6 6 0 0 1 28 86V34A6 6 0 0 1 34 28ZM37 41H62V49H37ZM37 56H62V64H37ZM37 71H56V79H37Z" />
+  <g fill="none" stroke="currentColor" stroke-linecap="square">
+    <path d="M83.5 37.5L97.5 51.5M97.5 37.5L83.5 51.5" stroke-width="8.6" />
+    <path d="M83 68H99M83 83H94" stroke-width="8" />
   </g>
 </svg>
 """

@@ -1,21 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CrossPlay">
-  <title>CrossPlay</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="XMarginalia">
+  <title>XMarginalia</title>
   <!--
     The same mark as logo.svg, with the ink colour resolved light instead of
-    inherited.
-
-    logo.svg draws in currentColor, which is right when the page inlines it and
-    useless in an <img>: an external SVG cannot see the document's colour, so it
-    falls back to black and disappears against a dark README. GitHub picks
-    between the two with #gh-light-mode-only / #gh-dark-mode-only.
-
-    Keep the geometry identical to logo.svg. If the mark changes, change both.
+    inherited. Keep the geometry identical to logo.svg.
   -->
-  <rect x="8.4" y="8.4" width="15.2" height="15.2" rx="1.6" fill="#f2f1ec" />
   <g fill="none" stroke="#f2f1ec" stroke-width="2.6" stroke-linecap="square">
     <path d="M2.6 10.4V2.6h7.8" />
     <path d="M29.4 10.4V2.6h-7.8" />
     <path d="M2.6 21.6v7.8h7.8" />
     <path d="M29.4 21.6v7.8h-7.8" />
+  </g>
+  <path fill-rule="evenodd" fill="#f2f1ec" d="M9 7.5H17.5A1.5 1.5 0 0 1 19 9V23A1.5 1.5 0 0 1 17.5 24.5H9A1.5 1.5 0 0 1 7.5 23V9A1.5 1.5 0 0 1 9 7.5ZM10 11H16.5V13H10ZM10 15H16.5V17H10ZM10 19H14.8V21H10Z" />
+  <g fill="none" stroke="#f2f1ec" stroke-linecap="square">
+    <path d="M22.2 10L26 13.8M26 10L22.2 13.8" stroke-width="2.3" />
+    <path d="M22.2 18.2H26.2M22.2 22H25" stroke-width="2.1" />
   </g>
 </svg>

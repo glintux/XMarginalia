@@ -1,24 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CrossPlay">
-  <title>CrossPlay</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="XMarginalia">
+  <title>XMarginalia</title>
   <!--
-    The screen, inside the frame this fork draws around everything.
+    The XMarginalia mark: a reading page and margin annotations inside four
+    e-ink corner brackets ("Bracketed Note").
 
-    Corner brackets are the one mark CrossPlay invented rather than inherited:
-    they sit around the chess board, the mini board on its menu, and every
-    Toybox panel. docs/identity.md rules out a mascot and rules out anything not
-    made of the product's own material, and this is the most of that material
-    any single shape can carry.
-
-    It is also the version that survives being small. Four right angles and a
-    solid block have no detail to lose at 16px, and unlike a pair of overlapping
-    rectangles it does not collide with the copy/duplicate glyph every desktop
-    already uses.
+    Uses fill-rule="evenodd" for the page cutouts so the mark renders with a
+    single ink colour (currentColor) across light, cream e-paper, and dark
+    surfaces. Keep the geometry synchronized with logo-dark.svg, favicon.svg,
+    src/network/html/assets/crosspoint-icon.svg, and scripts/generate_logo.py.
   -->
-  <rect x="8.4" y="8.4" width="15.2" height="15.2" rx="1.6" fill="currentColor" />
   <g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square">
     <path d="M2.6 10.4V2.6h7.8" />
     <path d="M29.4 10.4V2.6h-7.8" />
     <path d="M2.6 21.6v7.8h7.8" />
     <path d="M29.4 21.6v7.8h-7.8" />
+  </g>
+  <path fill-rule="evenodd" fill="currentColor" d="M9 7.5H17.5A1.5 1.5 0 0 1 19 9V23A1.5 1.5 0 0 1 17.5 24.5H9A1.5 1.5 0 0 1 7.5 23V9A1.5 1.5 0 0 1 9 7.5ZM10 11H16.5V13H10ZM10 15H16.5V17H10ZM10 19H14.8V21H10Z" />
+  <g fill="none" stroke="currentColor" stroke-linecap="square">
+    <path d="M22.2 10L26 13.8M26 10L22.2 13.8" stroke-width="2.3" />
+    <path d="M22.2 18.2H26.2M22.2 22H25" stroke-width="2.1" />
   </g>
 </svg>
