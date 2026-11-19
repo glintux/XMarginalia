@@ -2,9 +2,9 @@
 
 **XMarginalia** is a fork built by unifying three related e-reader firmware projects:
 
-- **CrossPoint Reader** (upstream core EPUB/XTC reader, SD plugin host, sync, and core HAL/FS)
-- **CrossInk** (UI themes, 5-slot modular status bar customization, Focus Reading / Phase 4 typography, reading stats, Nearby CIFT file transfer, and Controls 2.0)
-- **CrossPlay** (`src/apps_local/` shelf of games, Study, Notes, Wikipedia, Wallpapers, Instapaper, Hacker News, xkcd, Calculator, and its host-test & simulator harness)
+- [**CrossPoint Reader**](https://github.com/crosspoint-reader/crosspoint-reader) (upstream core EPUB/XTC reader, SD plugin host, sync, and core HAL/FS)
+- [**CrossInk**](https://github.com/uxjulia/CrossInk) (UI themes, 5-slot modular status bar customization, Focus Reading / Phase 4 typography, reading stats, Nearby CIFT file transfer, and Controls 2.0)
+- [**CrossPlay**](https://github.com/ma-r-s/crossplay) (`src/apps_local/` shelf of games, Study, Notes, Wikipedia, Wallpapers, Instapaper, Hacker News, xkcd, Calculator, and its host-test & simulator harness)
 
 This document itemizes **every feature, board target, subsystem, build script, and SDK change in XMarginalia that differs from upstream CrossPoint, CrossInk, and CrossPlay**. See [LOCAL_SCOPE.md](../LOCAL_SCOPE.md) for the code-seam table linking these features to upstream files.
 

@@ -286,7 +286,7 @@ Always pass `-e <env>` to `pio run`: bare `pio run` targets upstream `[env:defau
 **XMarginalia** is a personal, non-commercial open-source fork licensed under MIT ([LICENSE](LICENSE)) and built on the work of the open-source e-ink community. Upstream projects are credited here for attribution and reference:
 
 - [**CrossPoint Reader**](https://github.com/crosspoint-reader/crosspoint-reader) — Upstream foundational firmware providing the EPUB/XTC reading engine, SD plugin system, sync engine, web portal, and HAL architecture. CrossPoint's original README is preserved at [docs/crosspoint-readme.md](docs/crosspoint-readme.md).
-- **CrossInk** — Upstream fork introducing the Minimal & Dashboard UI themes, customizable status bar, Focus Reading & Phase 4 typography, Reading Statistics, Controls 2.0, and Nearby CIFT transfer.
+- [**CrossInk**](https://github.com/uxjulia/CrossInk) — Upstream fork introducing the Minimal & Dashboard UI themes, customizable status bar, Focus Reading & Phase 4 typography, Reading Statistics, Controls 2.0, and Nearby CIFT transfer.
 - [**CrossPlay**](https://github.com/ma-r-s/crossplay) ([browser simulator](https://crossplay.ma-r-s.com)) — Upstream fork providing the `src/apps_local/` 27-game / 8-app shelf, Study, Hacker News, xkcd, Instapaper, Wallpapers, Wikipedia, Calculator, Notes, Play Nearby ESP-NOW multiplayer, host-test & simulator framework, and BOOX Picco / EEGO A4 upstream hardware & `v1.15.1` reliability fixes.
 - [**FreeInk SDK**](https://freeink.org/) — Low-level ESP32 e-paper HAL/SDK underlying these firmwares (extended in XMarginalia's [`glintux/freeink-sdk`](https://github.com/glintux/freeink-sdk) fork for all-PSRAM wolfSSL/display buffers and OPDS improvements).
 
