@@ -5,7 +5,7 @@
 
 <p align="center">
   <strong>Reading in the margins &mdash; on e-ink.</strong><br>
-  A unified reading, Audiobookshelf, spoiler-free AI companion, and tabletop firmware for ESP32-S3 e-readers.
+  A personal, non-commercial reading, Audiobookshelf, spoiler-free AI companion, and tabletop firmware for ESP32-S3 e-readers.
 </p>
 
 <p align="center">
@@ -17,9 +17,9 @@
   <a href="https://github.com/glintux/XMarginalia/releases">Releases</a>
 </p>
 
-![XMarginalia on e-ink hardware](site/assets/shots/og.png)
-
 ## Why XMarginalia Exists
+
+> **Personal Project Notice:** XMarginalia is a **personal, non-commercial** hobby project built for my own e-ink reading workflow and shared publicly as-is under open-source terms. See [Credit and upstream attribution](#credit-and-upstream-attribution) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for upstream attributions and third-party license details.
 
 Dedicated e-ink readers such as the **Xteink X4 Pro**, **Onyx BOOX Picco**, **EEGO A4 / A4 Lite**, **Seeed reTerminal Sticky**, and **M5Stack PaperMono / Lite** shine when they keep you inside a book or a thoughtful game without phone notifications or glare. Upstream firmware projects each solved part of that puzzle separately: **CrossPoint Reader** built the fast EPUB/XTC engine and SD plugin host, **CrossInk** refined themes, typography, modular status bars, reading stats, and gesture controls, and **CrossPlay** added a full e-ink game/app shelf and BOOX Picco bring-up.
 
@@ -283,12 +283,18 @@ Always pass `-e <env>` to `pio run`: bare `pio run` targets upstream `[env:defau
 
 ## Credit and upstream attribution
 
-**XMarginalia** is MIT-licensed and stands on the shoulders of the open-source e-ink firmware ecosystem. Upstream projects are credited here for attribution and reference:
+**XMarginalia** is a personal, non-commercial open-source fork licensed under MIT ([LICENSE](LICENSE)) and built on the work of the open-source e-ink community. Upstream projects are credited here for attribution and reference:
 
 - [**CrossPoint Reader**](https://github.com/crosspoint-reader/crosspoint-reader) — Upstream foundational firmware providing the EPUB/XTC reading engine, SD plugin system, sync engine, web portal, and HAL architecture. CrossPoint's original README is preserved at [docs/crosspoint-readme.md](docs/crosspoint-readme.md).
 - **CrossInk** — Upstream fork introducing the Minimal & Dashboard UI themes, customizable status bar, Focus Reading & Phase 4 typography, Reading Statistics, Controls 2.0, and Nearby CIFT transfer.
 - [**CrossPlay**](https://github.com/ma-r-s/crossplay) ([browser simulator](https://crossplay.ma-r-s.com)) — Upstream fork providing the `src/apps_local/` 27-game / 8-app shelf, Study, Hacker News, xkcd, Instapaper, Wallpapers, Wikipedia, Calculator, Notes, Play Nearby ESP-NOW multiplayer, host-test & simulator framework, and BOOX Picco / EEGO A4 upstream hardware & `v1.15.1` reliability fixes.
 - [**FreeInk SDK**](https://freeink.org/) — Low-level ESP32 e-paper HAL/SDK underlying these firmwares (extended in XMarginalia's [`glintux/freeink-sdk`](https://github.com/glintux/freeink-sdk) fork for all-PSRAM wolfSSL/display buffers and OPDS improvements).
+
+### Licensing & personal-use disclosures
+
+- **Permissive project & addition licenses**: XMarginalia's additions—including `companion-bridge` (`FastAPI` MIT, `Uvicorn` BSD-3, `RapidFuzz` MIT, `FastEmbed` Apache-2.0, `BAAI/bge-small-en-v1.5` MIT), the Audiobookshelf SD plugin, Tabletop extensions, and core firmware dependencies (`ArduinoJson`, `SdFat`, `QRCode`, `expat`, `miniz`, `uzlib`, `Lucide` ISC, `decNumber` ICU, `Peanut-GB` / `Walnut-CGB` MIT)—are permissively licensed.
+- **Copyleft firmware linkage**: Compiled ESP32 firmware binaries link **Arduino-wolfSSL** (`GPLv2+`, compatible with Apache-2.0 dependencies such as `NimBLE-Arduino`, `JPEGDEC`, `PNGdec`, and `AnimatedGIF` under `GPLv3`), **WebSockets** (`LGPLv2.1`), and **FreeType** (`FTL` / `GPLv2`). Complete corresponding source code is published in this repository and `glintux/freeink-sdk`.
+- **Inherited non-commercial / open-item content**: **xkcd** (`CC BY-NC 2.5`) is non-commercial with attribution; **Trivia** uses a community Jeopardy! transcription dataset; **Connections** and **Wordle** fetch puzzles from external mirrors only when requested; and the inherited upstream browser-demo SD card under `tools_local/wasm/sdcard/` still carries a rasterized **KaiTi** font flagged in [docs/open-items.md](docs/open-items.md) (not compiled into device firmware binaries).
 
 ### Third-party content & library notices
 
