@@ -27,6 +27,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
+#include "apps_local/daybook/DaybookSleep.h"
 #include "apps_local/notes/NotesSleep.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -830,7 +831,13 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
   return true;
 }
 
+// Daybook: today's agenda drawn over the Custom wallpaper, when Daybook > Settings has it on. Read fresh at each
+// sleep, so the screen is always today's. The wallpaper is drawn black and white for it: no gray pass follows, so
+// nothing redraws the picture under the panel. The device restarts on wake, so this never outlives one sleep.
+static bool daybookAgenda = false;
+
 void SleepActivity::renderCustomSleepScreen() const {
+  daybookAgenda = daybook::agendaEnabled();
   // /sleep.bmp on the SD root takes priority over custom sleep directories.
   if (renderCustomSleepBmp("/sleep.bmp")) return;
 
@@ -878,7 +885,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
   if (!preserveBackground) renderer.clearScreen();
 
-  const bool hasGreyscale = (bitmap.hasGreyscale() || (preserveBackground && overlayGrayCover)) &&
+  const bool hasGreyscale = !daybookAgenda && (bitmap.hasGreyscale() || (preserveBackground && overlayGrayCover)) &&
                             (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                        CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
@@ -891,6 +898,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
   }
+
+  if (daybookAgenda) daybook::drawAgenda(renderer);
 
   // Cover + Transparent: the B/W cover is the overlay's background; the overlay renderers redraw its gray planes.
   if (overlayCover == &bitmap) {

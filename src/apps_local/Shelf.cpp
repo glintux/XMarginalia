@@ -18,6 +18,7 @@
 #include "chess/ChessActivity.h"
 #include "connectfour/ConnectFourActivity.h"
 #include "connections/ConnectionsActivity.h"
+#include "daybook/DaybookActivity.h"
 #include "dungeon/DungeonActivity.h"
 #include "forehead/ForeheadActivity.h"
 #include "go/GoActivity.h"
@@ -93,6 +94,7 @@ constexpr shelf::Item kApps[] = {
     // Card #516. The icon is the Lucide list mark borrowed from Murdle while
     // the screens are being chosen; a Notes mark comes with the real app.
     {"NOTES", &icon_murdle_face_clues_32, &NotesActivity::create},
+    {"DAYBOOK", &icon_daybook_32, &DaybookActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because

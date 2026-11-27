@@ -27,7 +27,7 @@ Dedicated e-ink readers such as the **Xteink X4 Pro**, **Onyx BOOX Picco**, **EE
 
 1. **Spoiler-Free AI Companion (`companion-bridge`)**: Look up *"Who is this?"*, *"What is this?"*, *"Explain"*, *"Where was I?"*, and *"Recap chapter so far"* right from your current page—strictly truncated at or before what you have already read so answers never spoil later chapters.
 2. **First-Class Self-Hosted Audiobookshelf Integration**: Browse your Audiobookshelf libraries, download EPUBs with metadata sidecars, link existing SD card books without re-downloading, queue offline progress pushes, and perform two-way EPUB CFI sync straight from the reader menu—with zero intermediate OPDS or external sync daemon required.
-3. **Unified Reader Experience Across Three Upstreams**: CrossPoint's EPUB/XTC engine and SD plugin runtime, CrossInk's **Minimal** & **Dashboard** themes, restored **5-slot Bottom Status Bar**, **Focus Reading**, **Controls 2.0**, **Reading Statistics**, and **Nearby CIFT Transfer**, alongside CrossPlay's **26 games and 8 apps** (including the **11-mode Tabletop suite**).
+3. **Unified Reader Experience Across Three Upstreams**: CrossPoint's EPUB/XTC engine and SD plugin runtime, CrossInk's **Minimal** & **Dashboard** themes, restored **5-slot Bottom Status Bar**, **Focus Reading**, **Controls 2.0**, **Reading Statistics**, and **Nearby CIFT Transfer**, alongside CrossPlay's **26 games and 9 apps** (including the **11-mode Tabletop suite**).
 4. **Broad Hardware & Safe Flashing Coverage**: Ships verified release images for **X4 Pro**, **BOOX Picco** (preserving vendor `safeboot` via app-only `0xE0000` writes), and **EEGO A4 / A4 Lite**, backed by all-PSRAM wolfSSL TLS buffers, PSRAM display shadow buffers, hardened OPDS parsing, and zero-rebuild USB tooling.
 
 For a file-by-file breakdown of everything XMarginalia adds or changes relative to CrossPoint, CrossInk, and CrossPlay, see [docs/xmarginalia-differences.md](docs/xmarginalia-differences.md) and [docs/picco.md](docs/picco.md).
@@ -113,7 +113,7 @@ In addition to **PLAY NEARBY** multiplayer games, readers can exchange books and
 
 ## What is on it
 
-**XMarginalia** preserves upstream CrossPlay's **26 games and 8 apps** shelf alongside **Tabletop**'s 10 competitive games and 4 sandbox tools (experimental `apps_local/rss/` is intentionally omitted to preserve flash headroom):
+**XMarginalia** preserves upstream CrossPlay's **26 games and 9 apps** shelf alongside **Tabletop**'s 10 competitive games and 4 sandbox tools (experimental `apps_local/rss/` is intentionally omitted to preserve flash headroom):
 
 ### Games
 
@@ -165,6 +165,7 @@ In addition to **PLAY NEARBY** multiplayer games, readers can exchange books and
 | **Wikipedia**   | Fifty thousand articles on the card, read like a book, no internet.      |
 | **Calculator**  | A calculator with keys the size of a thumb, and the sums you already did. |
 | **Notes**       | Lists you tick with one hand, kept as plain text files on the card.      |
+| **Daybook**     | A calendar and to-do lists, with today and tomorrow on the sleep screen. |
 
 Don't want all of them? Tap **GAMES** or **APPS** at the top of the list on your device and untick what you don't play.
 

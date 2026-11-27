@@ -1,0 +1,39 @@
+name: Build X4 Pro
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [xteink]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: |
+          pip install platformio
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build x4pro
+        run: pio run -e x4pro
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-x4pro
+          path: .pio/build/x4pro/firmware.bin
+          if-no-files-found: error

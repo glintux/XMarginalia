@@ -469,3 +469,7 @@ wordle_delete = delete
 # TABLETOP suite. `dices` is two tumbling cubes with pips, the universal
 # mark for tabletop and board games.
 tabletop      = dices
+
+# DAYBOOK: the calendar and the to-dos in one app. `calendar-check` is a month
+# page with a tick, which says both halves at 32px in one bit.
+daybook       = calendar-check
